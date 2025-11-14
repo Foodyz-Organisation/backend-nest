@@ -3,6 +3,7 @@ import { IsString, IsEmail, IsOptional, IsInt, IsUrl } from 'class-validator';
 export class CreateReclamationDto {
   @IsString()
   nomClient: string;
+   @IsOptional()
 
   @IsEmail()
   emailClient: string;

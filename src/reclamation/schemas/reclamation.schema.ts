@@ -8,8 +8,8 @@ export class Reclamation {
   @Prop({ required: true })
   nomClient: string;
 
-  @Prop({ required: true })
-  emailClient: string;
+  @Prop({ required: false })  // ✅ Changé de true à false
+  emailClient?: string; 
 
   @Prop({ required: true })
   description: string;

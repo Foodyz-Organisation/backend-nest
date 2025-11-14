@@ -1,22 +1,32 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete ,UseGuards} from '@nestjs/common';
 import { ReclamationService } from './reclamation.service';
 import { CreateReclamationDto } from './dto/create-reclamation.dto';
 import { UpdateReclamationDto } from './dto/update-reclamation.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
+import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
+import { CurrentUser } from 'src/common/decorators/user.decorator';
+
 @ApiTags('Reclamation')
 
 @Controller('reclamation')
 export class ReclamationController {
   constructor(private readonly reclamationService: ReclamationService) {}
 
+  @UseGuards(JwtAuthGuard)
   @Post()
-    @ApiOperation({ summary: 'Créer un événement' })
-  @ApiResponse({ status: 201, description: 'Événement créé avec succès.' })
-
-  create(@Body() createReclamationDto: CreateReclamationDto) {
-    return this.reclamationService.create(createReclamationDto);
+  @ApiOperation({ summary: 'Créer une réclamation (utilisateur connecté)' })
+  @ApiResponse({ status: 201, description: 'Réclamation créée avec succès.' })
+  create(
+    @Body() createReclamationDto: CreateReclamationDto,
+    @CurrentUser() user: any,
+  ) {
+    // user contient les infos extraites du token
+    return this.reclamationService.create({
+      ...createReclamationDto,
+      nomClient: user.nomPrenom,
+      emailClient: user.email,
+    });
   }
-
   @Get()
     @ApiOperation({ summary: 'Lister tous les événements' })
   @ApiResponse({ status: 200, description: 'Liste des événements.' })

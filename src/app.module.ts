@@ -8,9 +8,13 @@ import { AuthModule } from './auth/auth.module';
 import { ReclamationModule } from './reclamation/reclamation.module';
 import { DealsModule } from './deals/deals.module';
 import { EventsModule } from './events/events.module';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
-  imports: [
+  imports: [ConfigModule.forRoot({
+      isGlobal: true,  // ← Important !
+      envFilePath: '.env',  // ← Chemin vers le fichier .env
+    }),
     MongooseModule.forRoot(process.env.MONGO_URI || 'mongodb://localhost:27017/Foodyz'),
     UseraccountModule,
     ProfessionalaccountModule,

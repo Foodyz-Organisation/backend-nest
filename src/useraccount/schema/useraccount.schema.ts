@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document , Types } from 'mongoose';
 
 export type UserDocument = UserAccount & Document;
 
@@ -21,7 +21,13 @@ export class UserAccount {
   password: string;
 
   @Prop({ default: 'user' })
+
   role: string;
+  @Prop()
+  resetToken?: string;
+
+  @Prop()
+  resetTokenExpiry?: Date;
 
   @Prop({ default: true }) // active by default
   isActive: boolean;
