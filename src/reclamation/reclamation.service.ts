@@ -24,6 +24,18 @@ try {
   async findAll() {
     return this.reclamationModel.find().exec();
   }
+   // ✅ NOUVELLE MÉTHODE: Récupérer les réclamations par userId
+ async findByUserId(userId: string) {
+  console.log("🔍 Searching reclamations for userId:", userId);
+  
+  const reclamations = await this.reclamationModel.find({
+    userId: userId   // 👈 EXACTEMENT comme stocké dans ta DB
+  }).sort({ createdAt: -1 });
+
+  console.log(`✅ Found ${reclamations.length} reclamation(s) for user ${userId}`);
+  return reclamations;
+}
+
 
   async findOne(id: string) {
 const event = await this.reclamationModel.findById(id).exec();

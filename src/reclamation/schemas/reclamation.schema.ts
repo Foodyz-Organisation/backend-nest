@@ -25,6 +25,9 @@ export class Reclamation {
 
   @Prop()
   image?: string; // 👈 champ optionnel pour l'image
+
+  @Prop({ required: true })
+  userId: string;
 }
 
 export const ReclamationSchema = SchemaFactory.createForClass(Reclamation);
