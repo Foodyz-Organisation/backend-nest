@@ -28,6 +28,20 @@ export class Reclamation {
 
   @Prop({ required: true })
   userId: string;
+   @Prop({ default: 'ouaghlani.manel@esprit.tn' })
+  restaurantEmail?: string;
+
+  // Optionnellement aussi un id de resto
+  @Prop({ default: '69245d58871665d54c49a07a' })
+  restaurantId?: string;
+  @Prop()
+  responseMessage?: string;
+
+  @Prop()
+  respondedBy?: string; // id ou email du restaurateur
+
+  @Prop()
+  respondedAt?: Date;
 }
 
 export const ReclamationSchema = SchemaFactory.createForClass(Reclamation);

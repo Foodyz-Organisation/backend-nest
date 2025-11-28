@@ -7,8 +7,7 @@ async function bootstrap() {
 
   // ===== CORS Configuration =====
   app.enableCors({
-    origin: '*', // Permet toutes les origines (pour le développement)
-    // En production, remplacez par : origin: ['https://votre-domaine.com', 'myapp://']
+    origin: '*',
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
     allowedHeaders: 'Content-Type, Accept, Authorization',
@@ -20,18 +19,25 @@ async function bootstrap() {
     .setDescription('API for managing users, books, and borrow system')
     .setVersion('1.0')
     .addBearerAuth(
-      { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
-      'access-token',
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'Authorization',
+        description: 'Enter JWT token',
+        in: 'header',
+      },
+      'JWT-auth',  // ⚠️ NOM DU SCHÉMA
     )
     .build();
 
-  // Cast app as any to bypass type conflicts
   const document = SwaggerModule.createDocument(app as any, swaggerConfig);
   SwaggerModule.setup('api', app as any, document, {
-    swaggerOptions: { persistAuthorization: true },
+    swaggerOptions: {
+      persistAuthorization: true,  // ✅ Garde le token même après rafraîchissement
+    },
   });
 
-  // Start the server
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
   console.log(`🚀 Application is running on: http://localhost:${port}`);

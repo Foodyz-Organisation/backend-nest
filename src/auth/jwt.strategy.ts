@@ -1,24 +1,49 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor() {
+  constructor(private configService: ConfigService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || 'supersecretkey',
+      ignoreExpiration: false, // ✅ Vérifier l'expiration
+      secretOrKey: configService.get<string>('JWT_SECRET') || 'supersecretkey',
     });
+    console.log('🔐 JwtStrategy initialized with secret:', 
+      configService.get<string>('JWT_SECRET') ? 'from env' : 'default');
   }
 
   async validate(payload: any) {
-    // Les infos qui seront disponibles dans req.user
-    return {
-      userId: payload.sub,
-      email: payload.email,
-      nomPrenom: payload.username || payload.nomPrenom,
-      role: payload.role,
+    console.log('🔐 JWT Strategy - Payload reçu:', payload);
+
+    // Vérifier que le payload contient les champs requis
+    if (!payload.sub) {
+      console.log('❌ Missing sub in payload');
+      throw new UnauthorizedException('Invalid token: missing sub');
+    }
+
+    if (!payload.email) {
+      console.log('❌ Missing email in payload');
+      throw new UnauthorizedException('Invalid token: missing email');
+    }
+
+    if (!payload.role) {
+      console.log('❌ Missing role in payload');
+      throw new UnauthorizedException('Invalid token: missing role');
+    }
+
+    // ✅ Retourner un objet utilisateur normalisé
+    const user = {
+      userId: payload.sub,           // ID de l'utilisateur
+      email: payload.email,           // Email
+      username: payload.username,     // Nom d'utilisateur
+      nomPrenom: payload.username,    // Alias pour compatibilité
+      role: payload.role,             // 'user' ou 'professional'
     };
+
+    console.log('✅ JWT Strategy - User validé:', user);
+    return user;
   }
 }

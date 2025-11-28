@@ -1,9 +1,12 @@
-// src/common/decorators/user.decorator.ts
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 
 export const CurrentUser = createParamDecorator(
   (data: unknown, ctx: ExecutionContext) => {
     const request = ctx.switchToHttp().getRequest();
-    return request.user; // Injecté par JwtStrategy
+    const user = request.user;
+
+    console.log('👤 CurrentUser Decorator - User:', user);
+
+    return user; // Injecté par JwtStrategy
   },
 );

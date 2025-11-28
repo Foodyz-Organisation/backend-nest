@@ -14,7 +14,6 @@ import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class AuthService {
-  // ✅ Stocker temporairement les OTP (en production, utilisez Redis)
   private otpStore = new Map<string, { otp: string; expiresAt: Date }>();
 
   constructor(
@@ -26,8 +25,13 @@ export class AuthService {
 
   // ================= User Signup =================
   async userSignup(userData: SignupDto) {
-    if (!userData.password) throw new Error('Password is required');
+    if (!userData.password) throw new BadRequestException('Password is required');
     const normalizedEmail = userData.email.trim().toLowerCase();
+    
+    // Vérifier si l'email existe déjà
+    const exists = await this.userModel.findOne({ email: normalizedEmail }).exec();
+    if (exists) throw new BadRequestException('Email already registered');
+    
     const hashed = await bcrypt.hash(userData.password, 10);
     const newUser = new this.userModel({
       ...userData,
@@ -37,13 +41,19 @@ export class AuthService {
       isActive: true,
     });
     await newUser.save();
+    console.log('✅ User registered:', normalizedEmail);
     return { message: 'User registered successfully' };
   }
 
   // ================= Professional Signup =================
   async professionalSignup(profData: ProfessionalSignupDto) {
-    if (!profData.password) throw new Error('Password is required');
+    if (!profData.password) throw new BadRequestException('Password is required');
     const normalizedEmail = profData.email.trim().toLowerCase();
+    
+    // Vérifier si l'email existe déjà
+    const exists = await this.profModel.findOne({ email: normalizedEmail }).exec();
+    if (exists) throw new BadRequestException('Email already registered');
+    
     const hashed = await bcrypt.hash(profData.password, 10);
     const newProf = new this.profModel({
       ...profData,
@@ -53,51 +63,121 @@ export class AuthService {
       isActive: true,
     });
     await newProf.save();
+    console.log('✅ Professional registered:', normalizedEmail);
     return { message: 'Professional registered successfully' };
   }
 
-  // ================= Login =================
+  // ================= Login ================= ✅ CORRIGÉ
   async login(loginData: LoginDto) {
     const { email, password } = loginData;
     const normalizedEmail = email.trim().toLowerCase();
 
-    let account: UserDocument | ProfessionalDocument | null = await this.userModel.findOne({ email: normalizedEmail }).exec();
+    console.log('🔐 Login attempt for:', normalizedEmail);
+
+    // 1. Chercher dans les users
+    let account: UserDocument | ProfessionalDocument | null = 
+      await this.userModel.findOne({ email: normalizedEmail }).exec();
     let role: 'user' | 'professional' = 'user';
 
+    // 2. Si pas trouvé, chercher dans les professionals
     if (!account) {
       account = await this.profModel.findOne({ email: normalizedEmail }).exec();
       role = 'professional';
     }
 
-    if (!account) throw new UnauthorizedException('Invalid credentials');
-    if (!account.isActive) throw new UnauthorizedException('Account is deactivated');
+    // 3. Vérifications
+    if (!account) {
+      console.log('❌ Account not found:', normalizedEmail);
+      throw new UnauthorizedException('Invalid credentials');
+    }
 
+    if (!account.isActive) {
+      console.log('❌ Account deactivated:', normalizedEmail);
+      throw new UnauthorizedException('Account is deactivated');
+    }
+
+    // 4. Vérifier le mot de passe
     const isPasswordValid = await bcrypt.compare(password, account.password);
-    if (!isPasswordValid) throw new UnauthorizedException('Invalid credentials');
+    if (!isPasswordValid) {
+      console.log('❌ Invalid password for:', normalizedEmail);
+      throw new UnauthorizedException('Invalid credentials');
+    }
 
-    const payload = { sub: account._id, email: account.email, role };
-    const access_token = this.jwtService.sign(payload, { expiresIn: '15m' });
+    console.log('✅ Password valid for:', normalizedEmail);
+
+    // 5. Extraire le username selon le type de compte
+    let username: string;
+    
+    if (role === 'professional') {
+      const profAccount = account as any;
+      // Essayer différentes propriétés possibles
+      username = profAccount.professionalData?.fullName || 
+                 profAccount.fullName || 
+                 profAccount.nomPrenom ||
+                 account.email.split('@')[0];
+      console.log('🏢 Professional login:', { 
+        email: account.email, 
+        fullName: username,
+        accountData: {
+          professionalData: profAccount.professionalData,
+          fullName: profAccount.fullName,
+          nomPrenom: profAccount.nomPrenom
+        }
+      });
+    } else {
+      const userAccount = account as any;
+      username = userAccount.nomPrenom || 
+                 userAccount.fullName ||
+                 account.email.split('@')[0];
+      console.log('👤 User login:', { 
+        email: account.email, 
+        nomPrenom: username 
+      });
+    }
+
+    // 6. Créer le payload JWT
+    const accountId = String(account._id);
+    const payload = { 
+      sub: accountId,
+      email: account.email, 
+      role,
+      username,
+    };
+
+    console.log('🔐 JWT Payload:', payload);
+
+    // 7. ✅ FIX: Utiliser une durée d'expiration plus longue
+    const access_token = this.jwtService.sign(payload, { expiresIn: '24h' });
     const refresh_token = this.jwtService.sign(payload, { expiresIn: '7d' });
+
+    console.log('✅ Tokens generated successfully');
 
     return {
       access_token,
       refresh_token,
       role,
       email: account.email,
-      id: account._id,
+      id: accountId,
+      username,
     };
   }
 
-  // ================= Refresh Token =================
+  // ================= Refresh Token ================= ✅ CORRIGÉ
   async refreshToken(refreshToken: string) {
     try {
       const payload = this.jwtService.verify(refreshToken);
       const newAccessToken = this.jwtService.sign(
-        { sub: payload.sub, email: payload.email, role: payload.role },
-        { expiresIn: '15m' },
+        { 
+          sub: payload.sub, 
+          email: payload.email, 
+          role: payload.role,
+          username: payload.username 
+        },
+        { expiresIn: '24h' }, // ✅ 24h au lieu de 15m
       );
       return { access_token: newAccessToken };
     } catch (err) {
+      console.log('❌ Invalid refresh token:', err.message);
       throw new UnauthorizedException('Invalid refresh token');
     }
   }
@@ -108,35 +188,33 @@ export class AuthService {
     
     const normalizedEmail = email.trim().toLowerCase();
     
-    // Vérifier si l'utilisateur existe
-    let account: UserDocument | ProfessionalDocument | null = await this.userModel.findOne({ email: normalizedEmail }).exec();
+    let account: UserDocument | ProfessionalDocument | null = 
+      await this.userModel.findOne({ email: normalizedEmail }).exec();
     
     if (!account) {
       account = await this.profModel.findOne({ email: normalizedEmail }).exec();
     }
     
     if (!account) {
-      // Ne pas révéler si l'email existe ou non
+      console.log('⚠️ Account not found for OTP:', normalizedEmail);
+      // Ne pas révéler si l'email existe ou non (sécurité)
       return { 
         success: true, 
         message: 'If this email exists, an OTP has been sent' 
       };
     }
 
-    // Générer un code à 6 chiffres
     const otp = crypto.randomInt(100000, 999999).toString();
     console.log('🔑 Generated OTP:', otp);
     
-    // Stocker l'OTP avec expiration de 10 minutes
     this.otpStore.set(normalizedEmail, {
       otp,
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
     });
 
-    // Envoyer l'email
     try {
       await this.sendOtpEmail(normalizedEmail, otp);
-      console.log('✅ OTP sent successfully');
+      console.log('✅ OTP sent successfully to:', normalizedEmail);
     } catch (error) {
       console.error('❌ Failed to send OTP email:', error);
       throw new BadRequestException('Failed to send OTP email');
@@ -155,7 +233,7 @@ export class AuthService {
 
     console.log('🔍 Verifying OTP for:', normalizedEmail);
     console.log('📥 Received OTP:', otp);
-    console.log('💾 Stored OTP:', stored?.otp);
+    console.log('💾 Stored data:', stored ? 'exists' : 'not found');
 
     if (!stored) {
       throw new UnauthorizedException('No OTP found. Please request a new one.');
@@ -167,17 +245,17 @@ export class AuthService {
     }
 
     if (stored.otp !== otp) {
+      console.log('❌ OTP mismatch');
       throw new UnauthorizedException('Invalid OTP code');
     }
 
-    // OTP valide, générer un token temporaire pour reset
     const resetToken = crypto.randomBytes(32).toString('hex');
     console.log('✅ OTP verified, generated reset token');
     
-    // Stocker le token (remplacer l'OTP)
+    // Remplacer l'OTP par le reset token
     this.otpStore.set(normalizedEmail, {
       otp: resetToken,
-      expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000),
     });
 
     return { 
@@ -188,71 +266,65 @@ export class AuthService {
   }
 
   // ================= RESET PASSWORD =================
-// ================= RESET PASSWORD =================
-// ================= RESET PASSWORD =================
-// ================= RESET PASSWORD =================
-async resetPassword(email: string, resetToken: string, newPassword: string) {
-  const normalizedEmail = email.trim().toLowerCase();
-  const stored = this.otpStore.get(normalizedEmail);
+  async resetPassword(email: string, resetToken: string, newPassword: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const stored = this.otpStore.get(normalizedEmail);
 
-  console.log('🔍 Resetting password for:', normalizedEmail);
+    console.log('🔍 Resetting password for:', normalizedEmail);
 
-  if (!stored || stored.otp !== resetToken) {
-    throw new UnauthorizedException('Invalid or expired token');
-  }
+    if (!stored || stored.otp !== resetToken) {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
 
-  if (new Date() > stored.expiresAt) {
+    if (new Date() > stored.expiresAt) {
+      this.otpStore.delete(normalizedEmail);
+      throw new UnauthorizedException('Token expired');
+    }
+
+    // Chercher le compte
+    let account: UserDocument | ProfessionalDocument | null = 
+      await this.userModel.findOne({ email: normalizedEmail }).exec();
+    let isUser = true;
+
+    if (!account) {
+      account = await this.profModel.findOne({ email: normalizedEmail }).exec();
+      isUser = false;
+    }
+
+    if (!account) {
+      throw new UnauthorizedException('Account not found');
+    }
+
+    console.log('🔐 Old password hash:', account.password.substring(0, 20) + '...');
+    
+    // Hasher le nouveau mot de passe
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    console.log('🔐 New password hash:', hashedPassword.substring(0, 20) + '...');
+    
+    // Mettre à jour le mot de passe
+    account.password = hashedPassword;
+    await account.save();
+
+    // Vérification
+    const updatedAccount = isUser 
+      ? await this.userModel.findOne({ email: normalizedEmail }).exec()
+      : await this.profModel.findOne({ email: normalizedEmail }).exec();
+
+    if (updatedAccount) {
+      console.log('✅ Password updated successfully');
+      console.log('🔐 Password match:', updatedAccount.password === hashedPassword);
+    } else {
+      console.error('❌ Failed to retrieve updated account');
+    }
+
+    // Supprimer le token utilisé
     this.otpStore.delete(normalizedEmail);
-    throw new UnauthorizedException('Token expired');
+
+    return { 
+      success: true, 
+      message: 'Password reset successfully' 
+    };
   }
-
-  // Trouver le compte
-  let account: UserDocument | ProfessionalDocument | null = 
-    await this.userModel.findOne({ email: normalizedEmail }).exec();
-  let isUser = true;
-
-  if (!account) {
-    account = await this.profModel.findOne({ email: normalizedEmail }).exec();
-    isUser = false;
-  }
-
-  if (!account) {
-    throw new UnauthorizedException('Account not found');
-  }
-
-  // ✅ LOGS POUR DÉBOGUER
-  console.log('🔐 Old password hash:', account.password.substring(0, 20) + '...');
-  
-  // Mettre à jour le mot de passe
-  const hashedPassword = await bcrypt.hash(newPassword, 10);
-  console.log('🔐 New password hash:', hashedPassword.substring(0, 20) + '...');
-  
-  // ✅ UTILISER save() au lieu de updateOne()
-  account.password = hashedPassword;
-  await account.save();
-
-  // Vérifier immédiatement après la sauvegarde
-  const updatedAccount = isUser 
-    ? await this.userModel.findOne({ email: normalizedEmail }).exec()
-    : await this.profModel.findOne({ email: normalizedEmail }).exec();
-
-  // ✅ FIX: Vérifier que updatedAccount n'est pas null
-  if (updatedAccount) {
-    console.log('🔐 Saved password hash:', updatedAccount.password.substring(0, 20) + '...');
-    console.log('✅ Password match:', updatedAccount.password === hashedPassword);
-  } else {
-    console.error('❌ Failed to retrieve updated account');
-  }
-
-  // Nettoyer le store
-  this.otpStore.delete(normalizedEmail);
-  console.log('✅ Password reset successfully');
-
-  return { 
-    success: true, 
-    message: 'Password reset successfully' 
-  };
-}
 
   // ================= SEND OTP EMAIL =================
   async sendOtpEmail(email: string, otp: string) {

@@ -24,4 +24,11 @@ export class CreateReclamationDto {
   photos?: string[];
     userId?: string; // ✅ AJOUT (rempli automatiquement par le controller)
 
+    @IsOptional()
+  @IsString()
+  restaurantEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  restaurantId?: string;
 }
