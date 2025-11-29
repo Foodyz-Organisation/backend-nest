@@ -18,7 +18,6 @@ export class CreateReclamationDto {
   @IsString()
   complaintType: string;
 
-  @ApiProperty({ description: 'Liste des photos (URLs)', required: false })
   @IsOptional()
   @IsArray()
   photos?: string[];
