@@ -12,6 +12,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import { ChatManagementService } from './chat-management.service';
 import { SpamDetectionService } from './spam-detection.service';
+import { BadWordsDetectionService } from './bad-words-detection.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 
 @WebSocketGateway({ cors: true })
@@ -26,6 +27,7 @@ export class ChatManagementGateway
   constructor(
     private readonly chatService: ChatManagementService,
     private readonly spamDetectionService: SpamDetectionService,
+    private readonly badWordsDetectionService: BadWordsDetectionService,
     private readonly jwtService: JwtService,
   ) {}
 
@@ -66,7 +68,18 @@ export class ChatManagementGateway
         `Message spam analysis: is_spam=${spamAnalysis.is_spam}, confidence=${spamAnalysis.confidence}%`
       );
 
-      // Save message with spam detection info
+      // 🤬 Analyze message for bad words and moderate content
+      const moderationResult = await this.badWordsDetectionService.moderateMessage(
+        payload.content,
+        payload.conversationId,
+        senderId,
+      );
+
+      this.logger.log(
+        `Message moderation: has_bad_words=${moderationResult.wasModified}`
+      );
+
+      // Save message with spam detection and moderation info
       const saved = await this.chatService.sendMessage({
         conversationId: payload.conversationId,
         senderId,
@@ -75,6 +88,8 @@ export class ChatManagementGateway
         meta: payload.meta,
         isSpam: spamAnalysis.is_spam,
         spamConfidence: spamAnalysis.confidence,
+        hasBadWords: moderationResult.wasModified,
+        moderatedContent: moderationResult.moderatedContent,
       });
 
       // Diffuse à tous les clients dans la room (conversation)

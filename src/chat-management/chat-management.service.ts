@@ -21,6 +21,8 @@ type SendMessagePayload = {
   senderId: string;
   isSpam?: boolean;
   spamConfidence?: number;
+  hasBadWords?: boolean;
+  moderatedContent?: string;
 } & SendMessageDto;
 
 @Injectable()
@@ -156,7 +158,7 @@ export class ChatManagementService {
   }
 
   async sendMessage(payload: SendMessagePayload) {
-    const { conversationId, senderId, content, type, meta, isSpam, spamConfidence } = payload;
+    const { conversationId, senderId, content, type, meta, isSpam, spamConfidence, hasBadWords, moderatedContent } = payload;
     const conversation = await this.convModel.findById(conversationId).exec();
 
     if (!conversation) {
@@ -174,6 +176,8 @@ export class ChatManagementService {
       meta: meta || {},
       isSpam: isSpam || false,
       spamConfidence: spamConfidence || 0,
+      hasBadWords: hasBadWords || false,
+      moderatedContent: moderatedContent || content,
     });
 
     const saved = await message.save();

@@ -8,8 +8,11 @@ import {
   UseGuards,
   Req,
   UnauthorizedException,
+  Logger,
 } from '@nestjs/common';
 import { ChatManagementService } from './chat-management.service';
+import { SpamDetectionService } from './spam-detection.service';
+import { BadWordsDetectionService } from './bad-words-detection.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { AuthGuard } from '@nestjs/passport';
@@ -17,7 +20,13 @@ import { AuthGuard } from '@nestjs/passport';
 @Controller('chat')
 @UseGuards(AuthGuard('jwt')) // adapte selon ton guard
 export class ChatManagementController {
-  constructor(private readonly chatService: ChatManagementService) {}
+  private readonly logger = new Logger(ChatManagementController.name);
+
+  constructor(
+    private readonly chatService: ChatManagementService,
+    private readonly spamDetectionService: SpamDetectionService,
+    private readonly badWordsDetectionService: BadWordsDetectionService,
+  ) {}
 
   private getUserId(request: any): string {
     const userId = request.user?.userId || request.user?.sub || request.user?.id;
@@ -68,12 +77,39 @@ export class ChatManagementController {
     @Req() req: any,
   ) {
     const senderId = this.getUserId(req);
+
+    // 🔍 Analyze message for spam
+    const spamAnalysis = await this.spamDetectionService.analyzeMessage({
+      content: dto.content,
+      conversationId,
+      senderId,
+    });
+
+    this.logger.log(
+      `Message spam analysis: is_spam=${spamAnalysis.is_spam}, confidence=${spamAnalysis.confidence}%`
+    );
+
+    // 🤬 Analyze message for bad words and moderate content
+    const moderationResult = await this.badWordsDetectionService.moderateMessage(
+      dto.content,
+      conversationId,
+      senderId,
+    );
+
+    this.logger.log(
+      `Message moderation: has_bad_words=${moderationResult.wasModified}`
+    );
+
     return this.chatService.sendMessage({
       conversationId,
       senderId,
       content: dto.content,
       type: dto.type,
       meta: dto.meta,
+      isSpam: spamAnalysis.is_spam,
+      spamConfidence: spamAnalysis.confidence,
+      hasBadWords: moderationResult.wasModified,
+      moderatedContent: moderationResult.moderatedContent,
     });
   }
 

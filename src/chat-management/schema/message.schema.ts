@@ -26,6 +26,12 @@ export class Message {
   @Prop({ type: Number, default: 0 })
   spamConfidence?: number;
 
+  @Prop({ type: Boolean, default: false })
+  hasBadWords?: boolean;
+
+  @Prop({ type: String })
+  moderatedContent?: string;
+
   createdAt?: Date;
   updatedAt?: Date;
 }

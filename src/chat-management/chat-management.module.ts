@@ -5,6 +5,7 @@ import { ChatManagementService } from './chat-management.service';
 import { ChatManagementController } from './chat-management.controller';
 import { ChatManagementGateway } from './chat-management.gateway';
 import { SpamDetectionService } from './spam-detection.service';
+import { BadWordsDetectionService } from './bad-words-detection.service';
 import { Conversation, ConversationSchema } from './schema/conversation.schema';
 import { Message, MessageSchema } from './schema/message.schema';
 import { UserAccount, UserSchema } from '../useraccount/schema/useraccount.schema';
@@ -27,7 +28,7 @@ import {
     ]),
   ],
   controllers: [ChatManagementController],
-  providers: [ChatManagementService, ChatManagementGateway, SpamDetectionService],
+  providers: [ChatManagementService, ChatManagementGateway, SpamDetectionService, BadWordsDetectionService],
   exports: [ChatManagementService],
 })
 export class ChatManagementModule {}
