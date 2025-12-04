@@ -1,0 +1,146 @@
+{
+  "info": {
+    "name": "Foodyz Messaging",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Collection covering signup/login plus chat conversation and message APIs."
+  },
+  "item": [
+    {
+      "name": "Auth - User Signup",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"john\",\n  \"email\": \"john@example.com\",\n  \"password\": \"ChangeMe123!\",\n  \"phone\": \"+123456789\",\n  \"address\": \"123 Foody Street\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/auth/signup/user",
+          "host": ["{{base_url}}"],
+          "path": ["auth", "signup", "user"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Auth - Professional Signup",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"chef@example.com\",\n  \"password\": \"ChangeMe123!\",\n  \"fullName\": \"Chef Alex\",\n  \"licenseNumber\": \"LIC-0001\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/auth/signup/professional",
+          "host": ["{{base_url}}"],
+          "path": ["auth", "signup", "professional"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Auth - Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"john@example.com\",\n  \"password\": \"ChangeMe123!\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/auth/login",
+          "host": ["{{base_url}}"],
+          "path": ["auth", "login"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Chat - Create Conversation",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"kind\": \"private\",\n  \"participants\": [\"{{user_id}}\", \"{{professional_id}}\"],\n  \"title\": \"Consultation\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/chat/conversations",
+          "host": ["{{base_url}}"],
+          "path": ["chat", "conversations"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Chat - List Conversations",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "url": {
+          "raw": "{{base_url}}/chat/conversations",
+          "host": ["{{base_url}}"],
+          "path": ["chat", "conversations"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Chat - Get Messages",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "url": {
+          "raw": "{{base_url}}/chat/conversations/{{conversation_id}}/messages?limit=50",
+          "host": ["{{base_url}}"],
+          "path": ["chat", "conversations", "{{conversation_id}}", "messages"],
+          "query": [
+            { "key": "limit", "value": "50" }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Chat - Send Message",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": \"Hello from Postman\",\n  \"type\": \"text\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/chat/conversations/{{conversation_id}}/messages",
+          "host": ["{{base_url}}"],
+          "path": ["chat", "conversations", "{{conversation_id}}", "messages"]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:3000" },
+    { "key": "access_token", "value": "" },
+    { "key": "conversation_id", "value": "" },
+    { "key": "user_id", "value": "" },
+    { "key": "professional_id", "value": "" }
+  ]
+}
