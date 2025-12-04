@@ -19,6 +19,8 @@ import {
 type SendMessagePayload = {
   conversationId: string;
   senderId: string;
+  isSpam?: boolean;
+  spamConfidence?: number;
 } & SendMessageDto;
 
 @Injectable()
@@ -154,7 +156,7 @@ export class ChatManagementService {
   }
 
   async sendMessage(payload: SendMessagePayload) {
-    const { conversationId, senderId, content, type, meta } = payload;
+    const { conversationId, senderId, content, type, meta, isSpam, spamConfidence } = payload;
     const conversation = await this.convModel.findById(conversationId).exec();
 
     if (!conversation) {
@@ -170,6 +172,8 @@ export class ChatManagementService {
       content,
       type: type || 'text',
       meta: meta || {},
+      isSpam: isSpam || false,
+      spamConfidence: spamConfidence || 0,
     });
 
     const saved = await message.save();

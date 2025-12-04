@@ -20,6 +20,12 @@ export class Message {
   @Prop({ type: Object, default: {} })
   meta?: Record<string, any>;
 
+  @Prop({ type: Boolean, default: false })
+  isSpam?: boolean;
+
+  @Prop({ type: Number, default: 0 })
+  spamConfidence?: number;
+
   createdAt?: Date;
   updatedAt?: Date;
 }

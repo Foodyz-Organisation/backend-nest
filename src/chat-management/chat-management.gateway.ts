@@ -11,6 +11,7 @@ import { Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import { ChatManagementService } from './chat-management.service';
+import { SpamDetectionService } from './spam-detection.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 
 @WebSocketGateway({ cors: true })
@@ -24,6 +25,7 @@ export class ChatManagementGateway
 
   constructor(
     private readonly chatService: ChatManagementService,
+    private readonly spamDetectionService: SpamDetectionService,
     private readonly jwtService: JwtService,
   ) {}
 
@@ -52,12 +54,27 @@ export class ChatManagementGateway
   async handleSendMessage(client: Socket, payload: CreateMessageDto) {
     try {
       const senderId = client.data.userId || this.extractUserId(client);
+      
+      // 🔍 Analyze message for spam
+      const spamAnalysis = await this.spamDetectionService.analyzeMessage({
+        content: payload.content,
+        conversationId: payload.conversationId,
+        senderId: senderId,
+      });
+
+      this.logger.log(
+        `Message spam analysis: is_spam=${spamAnalysis.is_spam}, confidence=${spamAnalysis.confidence}%`
+      );
+
+      // Save message with spam detection info
       const saved = await this.chatService.sendMessage({
         conversationId: payload.conversationId,
         senderId,
         content: payload.content,
         type: payload.type,
         meta: payload.meta,
+        isSpam: spamAnalysis.is_spam,
+        spamConfidence: spamAnalysis.confidence,
       });
 
       // Diffuse à tous les clients dans la room (conversation)
