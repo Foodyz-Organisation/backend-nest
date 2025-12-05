@@ -70,99 +70,95 @@ export class AuthService {
 
 
   // ================= Login ================= ✅ CORRIGÉ
-  async login(loginData: LoginDto) {
-    const { email, password } = loginData;
-    const normalizedEmail = email.trim().toLowerCase();
+ async login(loginData: LoginDto) {
+  const { email, password } = loginData;
+  const normalizedEmail = email.trim().toLowerCase();
 
-    console.log('🔐 Login attempt for:', normalizedEmail);
+  console.log('🔐 Login attempt for:', normalizedEmail);
 
-    // 1. Chercher dans les users
-    let account: UserDocument | ProfessionalDocument | null = 
-      await this.userModel.findOne({ email: normalizedEmail }).exec();
-    let role: 'user' | 'professional' = 'user';
+  // 1. Chercher dans les users
+  let account: UserDocument | ProfessionalDocument | null =
+    await this.userModel.findOne({ email: normalizedEmail }).exec();
+  let role: 'user' | 'professional' = 'user';
 
-    // 2. Si pas trouvé, chercher dans les professionals
-    if (!account) {
-      account = await this.profModel.findOne({ email: normalizedEmail }).exec();
-      role = 'professional';
-    }
-
-    // 3. Vérifications
-    if (!account) {
-      console.log('❌ Account not found:', normalizedEmail);
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    if (!account.isActive) {
-      console.log('❌ Account deactivated:', normalizedEmail);
-      throw new UnauthorizedException('Account is deactivated');
-    }
-
-    // 4. Vérifier le mot de passe
-    const isPasswordValid = await bcrypt.compare(password, account.password);
-    if (!isPasswordValid) {
-      console.log('❌ Invalid password for:', normalizedEmail);
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    console.log('✅ Password valid for:', normalizedEmail);
-
-    // 5. Extraire le username selon le type de compte
-    let username: string;
-    
-    if (role === 'professional') {
-      const profAccount = account as any;
-      // Essayer différentes propriétés possibles
-      username = profAccount.professionalData?.fullName || 
-                 profAccount.fullName || 
-                 profAccount.nomPrenom ||
-                 account.email.split('@')[0];
-      console.log('🏢 Professional login:', { 
-        email: account.email, 
-        fullName: username,
-        accountData: {
-          professionalData: profAccount.professionalData,
-          fullName: profAccount.fullName,
-          nomPrenom: profAccount.nomPrenom
-        }
-      });
-    } else {
-      const userAccount = account as any;
-      username = userAccount.nomPrenom || 
-                 userAccount.fullName ||
-                 account.email.split('@')[0];
-      console.log('👤 User login:', { 
-        email: account.email, 
-        nomPrenom: username 
-      });
-    }
-
-    // 6. Créer le payload JWT
-    const accountId = String(account._id);
-    const payload = { 
-      sub: accountId,
-      email: account.email, 
-      role,
-      username,
-    };
-
-    console.log('🔐 JWT Payload:', payload);
-
-    // 7. ✅ FIX: Utiliser une durée d'expiration plus longue
-    const access_token = this.jwtService.sign(payload, { expiresIn: '24h' });
-    const refresh_token = this.jwtService.sign(payload, { expiresIn: '7d' });
-
-    console.log('✅ Tokens generated successfully');
-
-    return {
-      access_token,
-      refresh_token,
-      role,
-      email: account.email,
-      id: accountId,
-      username,
-    };
+  // 2. Si pas trouvé, chercher dans les professionals
+  if (!account) {
+    account = await this.profModel.findOne({ email: normalizedEmail }).exec();
+    role = 'professional';
   }
+
+  // 3. Vérifications
+  if (!account) {
+    console.log('❌ Account not found:', normalizedEmail);
+    throw new UnauthorizedException('Invalid credentials');
+  }
+
+  if (!account.isActive) {
+    console.log('❌ Account deactivated:', normalizedEmail);
+    throw new UnauthorizedException('Account is deactivated');
+  }
+
+  // 4. Vérifier le mot de passe
+  const isPasswordValid = await bcrypt.compare(password, account.password);
+  if (!isPasswordValid) {
+    console.log('❌ Invalid password for:', normalizedEmail);
+    throw new UnauthorizedException('Invalid credentials');
+  }
+
+  console.log('✅ Password valid for:', normalizedEmail);
+
+  // --- Helper type guard to check if this is a user account ---
+  const isUserAccount = (acc: UserDocument | ProfessionalDocument): acc is UserDocument => {
+    return 'username' in acc || 'nomPrenom' in acc;
+  };
+
+  // 5. Extraire le username selon le type de compte
+  let username: string;
+
+  if (isUserAccount(account)) {
+    // 👤 User account
+    username = account.fullName || account.username || account.email.split('@')[0];
+    console.log('👤 User login:', { email: account.email, nomPrenom: username });
+  } else {
+    // 🏢 Professional account
+    username =
+      account.professionalData?.fullName ||
+      account.fullName ||
+      account.email.split('@')[0];
+    console.log('🏢 Professional login:', {
+      email: account.email,
+      fullName: username,
+      accountData: account,
+    });
+  }
+
+  // 6. Créer le payload JWT
+  const accountId = String(account._id);
+  const payload = {
+    sub: accountId,
+    email: account.email,
+    role,
+    username,
+  };
+
+  console.log('🔐 JWT Payload:', payload);
+
+  // 7. ✅ Générer tokens
+  const access_token = this.jwtService.sign(payload, { expiresIn: '24h' });
+  const refresh_token = this.jwtService.sign(payload, { expiresIn: '7d' });
+
+  console.log('✅ Tokens generated successfully');
+
+  return {
+    access_token,
+    refresh_token,
+    role,
+    email: account.email,
+    id: accountId,
+    username,
+  };
+}
+
 
   // ================= Refresh Token ================= ✅ CORRIGÉ
   async refreshToken(refreshToken: string) {
@@ -393,9 +389,19 @@ export class AuthService {
 
     await transporter.sendMail(mailOptions);
   }
-    async logout(): Promise<{ message: string }> {
+
+  private isUserAccount(account: UserDocument | ProfessionalDocument): account is UserDocument {
+    return (account as UserDocument).username !== undefined;
+  }
+
+  async logout(): Promise<{ message: string }> {
     // In a stateless JWT setup, logout just informs the client to delete tokens.
     // Server doesn’t need to do anything else.
     return { message: 'Logged out successfully' };
   }
 }
+
+
+
+
+
