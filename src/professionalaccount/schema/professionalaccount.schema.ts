@@ -5,6 +5,8 @@ export type ProfessionalDocument = ProfessionalAccount & Document;
 
 @Schema({ timestamps: true })
 export class ProfessionalAccount {
+
+  _id?: Types.ObjectId;
   @Prop({ required: true, unique: true })
   email: string;  // login identifier (same auth system)
 
@@ -17,6 +19,9 @@ export class ProfessionalAccount {
   @Prop({ default: true })
   isActive: boolean;
 
+  @Prop({ required: false }) // URL to the profile picture
+  profilePictureUrl?: string;
+
   @Prop({ type: Object, default: {} })
   professionalData: {
     fullName?: string;
@@ -27,6 +32,13 @@ export class ProfessionalAccount {
 
   @Prop({ type: Types.ObjectId, ref: 'UserAccount', required: false })
   linkedUserId?: Types.ObjectId; // optional link to a normal user
+
+    @Prop({ type: Number, default: 0 })
+  followerCount: number;
+
+  @Prop({ type: Number, default: 0 })
+  followingCount: number;
+  
 }
 
 export const ProfessionalSchema = SchemaFactory.createForClass(ProfessionalAccount);
