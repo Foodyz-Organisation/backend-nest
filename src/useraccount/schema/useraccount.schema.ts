@@ -1,12 +1,29 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 export type UserDocument = UserAccount & Document;
 
 @Schema({ timestamps: true })
 export class UserAccount {
+
+   _id?: Types.ObjectId;
+
+   
   @Prop({ required: true, unique: true })
   username: string;
+
+   @Prop({ required: false, default: '' }) // Full name, e.g., "Mohamed Ali"
+  fullName: string;
+
+  @Prop({ required: false, default: '' }) // Short description for the profile
+  bio: string;
+
+  // Interaction counts for profile
+  @Prop({ type: Number, default: 0 })
+  followerCount: number;
+
+  @Prop({ type: Number, default: 0 })
+  followingCount: number;
 
   @Prop({ required: true, unique: true })
   phone: string;
