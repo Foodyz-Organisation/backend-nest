@@ -22,6 +22,9 @@ export class UserAccount {
 
   @Prop({ default: 'user' })
   role: string;
+  
+  @Prop({ default: null })
+  profilePictureUrl: string;
 
   @Prop({ default: true }) // active by default
   isActive: boolean;

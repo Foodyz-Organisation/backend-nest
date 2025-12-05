@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { UserAccount, UserDocument } from '../useraccount/schema/useraccount.schema';
 import { ProfessionalAccount, ProfessionalDocument } from '../professionalaccount/schema/professionalaccount.schema';
 import { SignupDto } from './dto/Signup.dto';
@@ -34,20 +34,42 @@ export class AuthService {
   }
 
   // ================= Professional Signup =================
-  async professionalSignup(profData: ProfessionalSignupDto) {
-    if (!profData.password) throw new Error('Password is required');
+async professionalSignup(profData: ProfessionalSignupDto) {
+  if (!profData.password) throw new Error('Password is required');
 
-    const hashed = await bcrypt.hash(profData.password, 10);
-    const newProf = new this.profModel({
-      ...profData,
-      password: hashed,
-      role: 'professional',
-      isActive: true,
-    });
+  const hashed = await bcrypt.hash(profData.password, 10);
 
-    await newProf.save();
-    return { message: 'Professional registered successfully' };
-  }
+  // Map simple document strings → schema objects
+  const mappedDocuments =
+    profData.documents?.map((p) => ({
+      filename: p,
+      path: p,
+      verified: false,
+      ocrText: ''
+    })) || [];
+
+  const newProf = new this.profModel({
+    email: profData.email,
+    password: hashed,
+    role: 'professional',
+    isActive: true,
+
+    // NEW CLEAN STRUCTURE
+    fullName: profData.fullName || '',
+    licenseNumber: profData.licenseNumber || '',
+    documents: mappedDocuments,
+
+    linkedUserId: profData.linkedUserId
+      ? new Types.ObjectId(profData.linkedUserId)
+      : undefined,
+  });
+
+  await newProf.save();
+
+  return { message: 'Professional registered successfully' };
+}
+
+
 
   // ================= Login (Access + Refresh Tokens) =================
   async login(loginData: LoginDto) {
@@ -96,5 +118,12 @@ export class AuthService {
     } catch (err) {
       throw new UnauthorizedException('Invalid refresh token');
     }
+  }
+
+
+    async logout(): Promise<{ message: string }> {
+    // In a stateless JWT setup, logout just informs the client to delete tokens.
+    // Server doesn’t need to do anything else.
+    return { message: 'Logged out successfully' };
   }
 }

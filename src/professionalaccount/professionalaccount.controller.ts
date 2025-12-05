@@ -27,6 +27,12 @@ export class ProfessionalController {
     return this.profService.findByEmail(email);
   }
 
+  @Get('name/:name')
+  findByName(@Param('name') name: string) {
+    const decodedName = decodeURIComponent(name);
+    return this.profService.findByName(decodedName);
+  }
+
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateProfessionalDto) {
     return this.profService.update(id, dto);

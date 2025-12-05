@@ -1,0 +1,30 @@
+export enum Category {
+  // Core Categories
+  BURGER = 'BURGER',
+  PIZZA = 'PIZZA',
+  PASTA = 'PASTA',
+  MEXICAN = 'MEXICAN',
+  SUSHI = 'SUSHI',
+  ASIAN = 'ASIAN',
+  INDIAN = 'INDIAN',
+  MIDEAST = 'MIDEAST',
+  SEAFOOD = 'SEAFOOD',
+  CHICKEN = 'CHICKEN',
+  SANDWICHES = 'SANDWICHES',
+  SOUPS = 'SOUPS',
+  
+  // Dietary and Flavor
+  SALAD = 'SALAD',
+  VEGETARIAN = 'VEGETARIAN',
+  VEGAN = 'VEGAN',
+  HEALTHY = 'HEALTHY',
+  GLUTEN_FREE = 'GLUTEN_FREE',
+  SPICY = 'SPICY',
+  
+  // Item Type and Occasion
+  BREAKFAST = 'BREAKFAST',
+  DESSERT = 'DESSERT',
+  DRINKS = 'DRINKS',
+  KIDS_MENU = 'KIDS_MENU',
+  FAMILY_MEAL = 'FAMILY_MEAL',
+}

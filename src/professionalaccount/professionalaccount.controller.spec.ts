@@ -1,17 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ProfessionalaccountController } from './professionalaccount.controller';
-import { ProfessionalaccountService } from './professionalaccount.service';
+import { ProfessionalController } from './professionalaccount.controller';
+import { ProfessionalService } from './professionalaccount.service';
 
 describe('ProfessionalaccountController', () => {
-  let controller: ProfessionalaccountController;
+  let controller: ProfessionalController;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [ProfessionalaccountController],
-      providers: [ProfessionalaccountService],
+      controllers: [ProfessionalController],
+      providers: [ProfessionalService],
     }).compile();
 
-    controller = module.get<ProfessionalaccountController>(ProfessionalaccountController);
+    controller = module.get<ProfessionalController>(ProfessionalController);
   });
 
   it('should be defined', () => {

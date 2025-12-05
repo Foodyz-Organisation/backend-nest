@@ -10,24 +10,30 @@ import { ApiTags, ApiOperation } from '@nestjs/swagger';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  // ========== User Signup ==========
-  @ApiOperation({ summary: 'Register a new user account' })
-  @Post('signup/user')
-  async userSignup(@Body() userData: SignupDto) {
-    return this.authService.userSignup(userData);
-  }
+// ========== User Signup ==========
+@Post('signup/user')
+async userSignup(@Body() userData: SignupDto) {
+  console.log('Received user signup data:', userData); // <-- ADD THIS
+  return this.authService.userSignup(userData);
+}
 
-  // ========== Professional Signup ==========
-  @ApiOperation({ summary: 'Register a new professional account' })
-  @Post('signup/professional')
-  async professionalSignup(@Body() profData: ProfessionalSignupDto) {
-    return this.authService.professionalSignup(profData);
-  }
+// ========== Professional Signup ==========
+@Post('signup/professional')
+async professionalSignup(@Body() profData: ProfessionalSignupDto) {
+  console.log('Received professional signup data:', profData); // <-- ADD THIS
+  return this.authService.professionalSignup(profData);
+}
 
-  // ========== Shared Login ==========
-  @ApiOperation({ summary: 'Login for users and professionals' })
-  @Post('login')
-  async login(@Body() loginData: LoginDto) {
-    return this.authService.login(loginData);
+// ========== Shared Login ==========
+@Post('login')
+async login(@Body() loginData: LoginDto) {
+  console.log('Received login data:', loginData); // <-- ADD THIS
+  return this.authService.login(loginData);
+}
+
+
+    @Post('logout')
+  async logout() {
+    return this.authService.logout();
   }
 }
