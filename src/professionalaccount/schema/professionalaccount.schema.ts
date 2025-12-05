@@ -85,7 +85,11 @@ services: {
     ocrVerified?: boolean;
     documents?: { filename: string; path: string }[];
   };
+@Prop()
+  resetToken?: string;
 
+  @Prop()
+  resetTokenExpiry?: Date;
   @Prop({ type: Types.ObjectId, ref: 'UserAccount', required: false })
   linkedUserId?: Types.ObjectId; // optional link to a normal user
 
