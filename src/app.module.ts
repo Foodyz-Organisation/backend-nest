@@ -20,6 +20,7 @@ import { FollowsModule } from './follows/follows.module';
 import { MenuitemModule } from './menuitem/menuitem.module';
 import { OrderModule } from './order/order.module';
 import { CartitemModule } from './cartitem/cartitem.module';
+import { ChatManagementModule } from './chat-management/chat-management.module';
 
 
 
@@ -38,6 +39,7 @@ import { CartitemModule } from './cartitem/cartitem.module';
     UseraccountModule,
     ProfessionalaccountModule,
     AuthModule,
+    ChatManagementModule,
     ReclamationModule,
     DealsModule,
     EventsModule,

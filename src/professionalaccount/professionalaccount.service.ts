@@ -30,18 +30,18 @@ export class ProfessionalService {
         path: p
       })) || [];
 
-    const created = new this.profModel({
-      email: createDto.email,
-      password: hashed,
-      fullName: createDto.fullName || '',
-      licenseNumber: createDto.licenseNumber || '',
-      documents: mappedDocuments,
-      role: 'professional',
-      isActive: true,
-      linkedUserId: createDto.linkedUserId
-        ? new Types.ObjectId(createDto.linkedUserId)
-        : undefined
-    });
+const created = new this.profModel({
+  email: createDto.email,
+  password: hashed,
+  fullName: createDto.fullName || '',
+  licenseNumber: createDto.licenseNumber || '',
+  documents: createDto.documents || [], // just strings
+  role: 'professional',
+  isActive: true,
+  linkedUserId: createDto.linkedUserId
+    ? new Types.ObjectId(createDto.linkedUserId)
+    : undefined
+});
 
     return created.save();
   }
@@ -80,30 +80,30 @@ export class ProfessionalService {
       .exec();
   }
 
-  // =============================
-  // UPDATE
-  // =============================
-  async update(
-    id: string,
-    updateDto: UpdateProfessionalDto
-  ): Promise<ProfessionalAccount> {
-    const prof = await this.profModel.findById(id).exec();
-    if (!prof) throw new NotFoundException('Professional not found');
+// =============================
+// UPDATE
+// =============================
+async update(
+  id: string,
+  updateDto: UpdateProfessionalDto
+): Promise<ProfessionalAccount> {
+  const prof = await this.profModel.findById(id).exec();
+  if (!prof) throw new NotFoundException('Professional not found');
 
-    if (updateDto.password)
-      prof.password = await bcrypt.hash(updateDto.password, 10);
+  if (updateDto.password)
+    prof.password = await bcrypt.hash(updateDto.password, 10);
 
-    if (updateDto.fullName !== undefined)
-      prof.fullName = updateDto.fullName;
+  if (updateDto.fullName !== undefined)
+    prof.fullName = updateDto.fullName;
 
-    if (updateDto.licenseNumber !== undefined)
-      prof.licenseNumber = updateDto.licenseNumber;
+  if (updateDto.licenseNumber !== undefined)
+    prof.licenseNumber = updateDto.licenseNumber;
 
-    if (updateDto.documents !== undefined)
-      prof.documents = updateDto.documents;
+  // ✅ Use static string paths for documents
+  prof.documents = ['/uploads/license.pdf']; // static for now
 
-    return prof.save();
-  }
+  return prof.save();
+}
 
   // =============================
   // TOGGLE ACTIVE

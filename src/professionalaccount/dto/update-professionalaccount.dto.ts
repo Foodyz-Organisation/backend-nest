@@ -41,12 +41,9 @@ export class UpdateProfessionalDto {
   @IsString()
   imageUrl?: string;
 
+  // ✅ Use string array for now
   @IsOptional()
   @IsArray()
-  documents?: {
-    filename: string;
-    path: string;
-    ocrText?: string;
-    verified?: boolean;
-  }[];
+  @IsString({ each: true })
+  documents?: string[];
 }

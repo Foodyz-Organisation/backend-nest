@@ -461,51 +461,5 @@ export class PostsController {
     return this.postsService.getComments(new Types.ObjectId(postId)); // <-- Pass ObjectId
   }
 
-  @Get('home-feed')
-  @ApiOperation({ summary: 'Get a personalized home feed of posts from followed accounts' })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    type: Number,
-    description: 'Number of posts to return (default: 10)',
-    example: 10,
-  })
-  @ApiQuery({
-    name: 'cursor',
-    required: false,
-    type: String,
-    description: 'Cursor for pagination (Base64 encoded "LAST_CREATED_AT_ISO_STRING_LAST_ID_STRING")',
-    example: 'MjAyMy0xMC0yNlQxMjowMDowMC4wMDBaXzY1MzlmMzk0ODg2MTYwYmQ1MWUxZjIzYQ==',
-  })
-  @ApiResponse({ status: 200, description: 'Paginated list of posts from followed accounts', type: [PostSchema] })
-  @ApiResponse({ status: 400, description: 'Bad request (e.g., invalid ID or cursor)' })
-  @ApiHeader({
-    name: 'x-user-id',
-    description: 'The ID of the user (UserAccount or ProfessionalAccount) requesting the home feed (temporary)',
-    required: true,
-  })
-  @ApiHeader({
-    name: 'x-owner-type',
-    description: 'The type of the user (UserAccount or ProfessionalAccount) requesting the home feed (temporary)',
-    required: true,
-    enum: ['UserAccount', 'ProfessionalAccount'],
-  })
-  async getHomeFeed(
-    @Headers('x-user-id') viewerId: string,
-    @Headers('x-owner-type') viewerModel: 'UserAccount' | 'ProfessionalAccount',
-    @Query('limit') limit: number = 10,
-    @Query('cursor') cursor?: string,
-  ): Promise<PostSchema[]> { // Assuming PostSchema can represent the output directly
-    if (!Types.ObjectId.isValid(viewerId)) {
-      throw new BadRequestException('x-user-id header with a valid ObjectId is required.');
-    }
-    if (!['UserAccount', 'ProfessionalAccount'].includes(viewerModel)) {
-      throw new BadRequestException('x-owner-type header must be "UserAccount" or "ProfessionalAccount".');
-    }
-    if (limit < 1 || limit > 50) { // Example limit validation
-      throw new BadRequestException('Limit must be between 1 and 50.');
-    }
-    return this.postsService.getHomeFeed(new Types.ObjectId(viewerId), viewerModel, limit, cursor);
-  }
 
 }

@@ -52,6 +52,9 @@ export class UserAccount {
   @Prop({ default: true })
   isActive: boolean;
 
+  @Prop()
+  avatarUrl?: string;
+
   // ✅ NOUVEAU : Système de points de fidélité
   @Prop({ default: 0 })
   loyaltyPoints: number;

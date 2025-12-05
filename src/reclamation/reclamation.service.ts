@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Reclamation } from './entities/reclamation.entity';
+import { Reclamation } from './schemas/reclamation.schema';
 import { ReclamationDocument } from './schemas/reclamation.schema';
 import { CreateReclamationDto } from './dto/create-reclamation.dto';
 import { UpdateReclamationDto } from './dto/update-reclamation.dto';

@@ -1,8 +1,12 @@
-// dto/create-reclamation.dto.ts
 import { IsNotEmpty, IsString, IsArray, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateReclamationDto {
+  @ApiProperty({ description: 'Nom du client' })
+  @IsOptional()
+  @IsString()
+  nomClient?: string;
+
   @ApiProperty({ description: 'Description de la réclamation' })
   @IsNotEmpty()
   @IsString()
@@ -21,9 +25,12 @@ export class CreateReclamationDto {
   @IsOptional()
   @IsArray()
   photos?: string[];
-    userId?: string; // ✅ AJOUT (rempli automatiquement par le controller)
 
-    @IsOptional()
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
+  @IsOptional()
   @IsString()
   restaurantEmail?: string;
 

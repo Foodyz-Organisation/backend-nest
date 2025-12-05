@@ -7,6 +7,7 @@ export type ProfessionalDocument = ProfessionalAccount & Document;
 export class ProfessionalAccount {
 
   _id?: Types.ObjectId;
+
   @Prop({ required: true, unique: true })
   email: string;
 
@@ -14,59 +15,44 @@ export class ProfessionalAccount {
   password: string;
 
   // ===== Profile =====
-  @Prop({ required: false })
+  @Prop()
   fullName?: string; // will act as business name in the frontend
 
   @Prop()
   licenseNumber?: string;
 
-  @Prop({ required: false })
+  @Prop()
   description?: string;
 
-  @Prop({ required: false })
+  @Prop()
   address?: string;
 
-  @Prop({ required: false })
+  @Prop()
   phone?: string;
 
-  @Prop({ required: false })
+  @Prop()
   hours?: string;
 
-@Prop({
-  type: {
-    delivery: { type: Boolean, default: true },
-    takeaway: { type: Boolean, default: true },
-    dineIn: { type: Boolean, default: true },
-  },
-  default: {},
-})
-services: {
-  delivery: boolean;
-  takeaway: boolean;
-  dineIn: boolean;
-};
+  @Prop({
+    type: {
+      delivery: { type: Boolean, default: true },
+      takeaway: { type: Boolean, default: true },
+      dineIn: { type: Boolean, default: true },
+    },
+    default: {},
+  })
+  services: {
+    delivery: boolean;
+    takeaway: boolean;
+    dineIn: boolean;
+  };
 
-  @Prop({ required: false })
+  @Prop()
   imageUrl?: string;
 
-  // ===== Documents =====
-  @Prop({
-    type: [
-      {
-        filename: { type: String, required: true },
-        path: { type: String, required: true },
-        ocrText: { type: String },
-        verified: { type: Boolean, default: false }
-      }
-    ],
-    default: []
-  })
-  documents: {
-    filename: string;
-    path: string;
-    ocrText?: string;
-    verified?: boolean;
-  }[];
+  // ===== Documents (temporary as strings) =====
+  @Prop({ type: [String], default: [] })
+  documents?: string[]; // simple array of file paths for now
 
   // ===== Roles / Linking =====
   @Prop({ default: 'professional' })
@@ -75,7 +61,7 @@ services: {
   @Prop({ default: true })
   isActive: boolean;
 
-  @Prop({ required: false }) // URL to the profile picture
+  @Prop()
   profilePictureUrl?: string;
 
   @Prop({ type: Object, default: {} })
@@ -83,22 +69,24 @@ services: {
     fullName?: string;
     licenseNumber?: string;
     ocrVerified?: boolean;
-    documents?: { filename: string; path: string }[];
+    documents?: string[]; // optional copy of paths in professionalData
+    avatarUrl?: string;
   };
-@Prop()
+
+  @Prop()
   resetToken?: string;
 
   @Prop()
   resetTokenExpiry?: Date;
-  @Prop({ type: Types.ObjectId, ref: 'UserAccount', required: false })
-  linkedUserId?: Types.ObjectId; // optional link to a normal user
 
-    @Prop({ type: Number, default: 0 })
+  @Prop({ type: Types.ObjectId, ref: 'UserAccount' })
+  linkedUserId?: Types.ObjectId;
+
+  @Prop({ type: Number, default: 0 })
   followerCount: number;
 
   @Prop({ type: Number, default: 0 })
   followingCount: number;
-  
 }
 
 export const ProfessionalSchema = SchemaFactory.createForClass(ProfessionalAccount);
