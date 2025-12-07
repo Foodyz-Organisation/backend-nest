@@ -27,10 +27,7 @@ export class SignupDto {
     @IsString() // Add validation decorator
     @IsNotEmpty() // Add validation decorator
     address: string; // Removed '?' to make it required
-    // --- END MODIFIED ---
 
-    // Optional fields from UserAccount schema, if you want to allow setting them during signup
-    // If these are omitted, the backend's UserAccount schema default values will be used.
     @ApiPropertyOptional({ description: 'Full name of the user', example: 'John Doe' })
     @IsOptional()
     @IsString()
