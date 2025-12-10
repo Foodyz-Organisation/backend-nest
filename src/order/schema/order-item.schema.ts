@@ -1,42 +1,40 @@
 // schema/order-item.schema.ts
 import { Prop, Schema } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
+import { IntensityType } from '../../menuitem/schema/intensity-type.enum';
 
 @Schema({ _id: false })
 export class OrderItem {
-
   @Prop({ type: Types.ObjectId, ref: 'MenuItem', required: true })
   menuItemId: Types.ObjectId;
 
   @Prop({ required: true })
   quantity: number;
 
-  // Save selected ingredients (removed ones or all)
-  @Prop({
-    type: [{
-      name: String,
+  @Prop({ required: true })
+  name: string;
+
+  @Prop({ 
+    type: [{ 
+      name: String, 
       isDefault: Boolean,
-      isRemoved: Boolean,   // NEW — to track removed ingredient
-    }],
-    _id: false
+      intensityType: { type: String, enum: Object.values(IntensityType), required: false },
+      intensityColor: { type: String, required: false },
+      intensityValue: { type: Number, min: 0, max: 1, required: false } // ✅ ADD THIS
+    }], 
+    _id: false 
   })
-  ingredients: { 
-    name: string;
+  chosenIngredients: { 
+    name: string; 
     isDefault: boolean;
-    isRemoved: boolean;
+    intensityType?: IntensityType;
+    intensityColor?: string;
+    intensityValue?: number; // ✅ ADD THIS (0.0 to 1.0)
   }[];
 
-  // Save chosen options (add-ons)
-  @Prop({
-    type: [{
-      name: String,
-      price: Number
-    }],
-    _id: false
-  })
-  options: { name: string; price: number }[];
+  @Prop({ type: [{ name: String, price: Number }], default: [] })
+  chosenOptions: { name: string; price: number }[];
 
-  // Final calculated price for this customized item (quantity x item config)
   @Prop({ required: true })
-  totalItemPrice: number;
+  calculatedPrice: number;
 }

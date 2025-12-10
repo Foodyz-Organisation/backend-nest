@@ -29,7 +29,7 @@ import {
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
-import { Post as PostSchema } from './schemas/post.schema';
+import { PostDocument, Post as PostSchema } from './schemas/post.schema';
 // import { MulterFile } from '../common/types/multer-file.type'; // Removed as Express.Multer.File is used directly
 import { UploadResponseDto } from './dto/upload-response.dto';
 import { CreateCommentDto } from './dto/create-comment.dto'; // Ensure this is imported if used
@@ -79,7 +79,7 @@ export class PostsController {
         }
         cb(null, true);
       },
-      limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB per file
+      limits: { fileSize: 100 * 1024 * 1024 }, // ✅ CHANGED: 50MB → 100MB per file
     }),
   )
   async uploadFiles(@UploadedFiles() files: Express.Multer.File[]): Promise<UploadResponseDto> {
@@ -184,6 +184,25 @@ export class PostsController {
       throw new BadRequestException('Invalid owner ID format.');
     }
     return this.postsService.findByOwnerId(new Types.ObjectId(ownerId));
+  }
+
+  @Get('saved')
+  @ApiOperation({ summary: 'Get all saved posts for a normal user' })
+  @ApiResponse({ status: 200, description: 'List of saved posts with full details including comments', type: [PostSchema] })
+  @ApiResponse({ status: 400, description: 'Bad request (invalid user ID)' })
+  @ApiHeader({
+    name: 'x-user-id',
+    description: 'The ID of the normal user (UserAccount) retrieving their saved posts',
+    required: true,
+  })
+  async getSavedPosts(@Headers('x-user-id') userId: string): Promise<PostDocument[]> {
+    if (!userId) {
+      throw new BadRequestException('x-user-id header is required.');
+    }
+    if (!Types.ObjectId.isValid(userId)) {
+      throw new BadRequestException('Invalid user ID format.');
+    }
+    return this.postsService.getSavedPosts(new Types.ObjectId(userId));
   }
 
   // --- Get All Posts --- (General GET for the root path)

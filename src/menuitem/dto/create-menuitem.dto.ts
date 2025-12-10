@@ -1,6 +1,7 @@
 import { IsNotEmpty, IsNumber, IsString, IsArray, IsEnum, IsOptional, ValidateNested, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Category } from '../schema/menu-category.enum';
+import { IntensityType } from '../schema/intensity-type.enum';
 
 // DTO for items within the ingredients array
 export class IngredientDto {
@@ -11,6 +12,18 @@ export class IngredientDto {
     @IsOptional()
     @IsBoolean()
     isDefault: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    supportsIntensity?: boolean;
+
+    @IsOptional()
+    @IsEnum(IntensityType)
+    intensityType?: IntensityType; // Type of intensity (coffee, harissa, sauce, etc.)
+
+    @IsOptional()
+    @IsString()
+    intensityColor?: string; // Custom color (hex code). If not provided, will use default from intensityType
 }
 
 // DTO for items within the options array

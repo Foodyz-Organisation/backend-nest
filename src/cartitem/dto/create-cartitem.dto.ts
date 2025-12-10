@@ -6,16 +6,37 @@ import {
   IsNotEmpty,
   IsNumber,
   IsPositive,
-  ValidateNested
+  ValidateNested,
+  IsOptional,
+  IsEnum,
+  IsString,
+  Min,
+  Max
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { IntensityType } from '../../menuitem/schema/intensity-type.enum';
 
 class IngredientDto {
   @IsNotEmpty()
   name: string;
 
-  @IsBoolean()   // ✅ add this
+  @IsBoolean()
   isDefault: boolean;
+
+  @IsOptional()
+  @IsEnum(IntensityType)
+  intensityType?: IntensityType;
+
+  @IsOptional()
+  @IsString()
+  intensityColor?: string;
+
+  // ✅ ADD THIS:
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  intensityValue?: number; // 0.0 to 1.0
 }
 
 class OptionDto {

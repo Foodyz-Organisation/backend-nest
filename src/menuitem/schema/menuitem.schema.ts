@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { Category } from './menu-category.enum';
+import { IntensityType } from './intensity-type.enum';
 
 export type MenuItemDocument = MenuItem & Document;
 
@@ -22,8 +23,24 @@ export class MenuItem {
   category: Category;
 
   // Ingredients array, required
-  @Prop({ type: [{ name: String, isDefault: Boolean }], _id: false, required: true })
-  ingredients: { name: string; isDefault: boolean }[];
+  @Prop({ 
+    type: [{ 
+      name: String, 
+      isDefault: Boolean, 
+      supportsIntensity: { type: Boolean, default: false },
+      intensityType: { type: String, enum: Object.values(IntensityType), required: false },
+      intensityColor: { type: String, required: false }
+    }], 
+    _id: false, 
+    required: true 
+  })
+  ingredients: { 
+    name: string; 
+    isDefault: boolean; 
+    supportsIntensity: boolean;
+    intensityType?: IntensityType;
+    intensityColor?: string;
+  }[];
 
   // Options array, required
   @Prop({ type: [{ name: String, price: Number }], _id: false, required: true })

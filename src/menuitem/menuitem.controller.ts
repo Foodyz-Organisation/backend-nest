@@ -20,6 +20,8 @@ import { MenuItem } from './schema/menuitem.schema';
 import { CreateMenuItemDto } from './dto/create-menuitem.dto';
 import { UpdateMenuItemDto } from './dto/update-menuitem.dto';
 import { Category } from './schema/menu-category.enum';
+import { IntensityType } from './schema/intensity-type.enum';
+import { INTENSITY_CONFIG_MAP } from './schema/intensity-config';
 
 type MenuByCategory = {
   [key in Category]?: MenuItem[];
@@ -40,7 +42,6 @@ export class MenuItemController {
     @Body() body: any,
   ): Promise<MenuItem> {
     let createMenuItemDto: CreateMenuItemDto;
-
     try {
       if (!body.createMenuItemDto) {
         throw new BadRequestException('Missing createMenuItemDto field in form-data');
@@ -53,13 +54,11 @@ export class MenuItemController {
       console.error('JSON parse error:', e);
       throw new BadRequestException('The DTO payload is not valid JSON.');
     }
-
     if (file) {
       createMenuItemDto.image = `uploads/${file.filename}`;
     } else {
       console.warn('No file received by Multer!');
     }
-
     return this.menuItemService.create(createMenuItemDto);
   }
 
@@ -83,21 +82,73 @@ export class MenuItemController {
   }
 
   // =================================================================
-  // 4. PUT: Update an Item by ID
+  // 4. PUT: Update an Item by ID (with image - multipart)
+  // ⚠️ IMPORTANT: This route MUST come BEFORE the generic @Put(':id')
+  // =================================================================
+  @Put(':id/with-image')
+  @UseInterceptors(FileInterceptor('image', ImageUploadService.getMulterConfig()))
+  async updateWithImage(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: any,
+  ): Promise<MenuItem> {
+    let updateMenuItemDto: UpdateMenuItemDto;
+    try {
+      if (!body.updateMenuItemDto) {
+        throw new BadRequestException('Missing updateMenuItemDto field in form-data');
+      }
+      updateMenuItemDto = plainToInstance(
+        UpdateMenuItemDto,
+        JSON.parse(body.updateMenuItemDto),
+      );
+    } catch (e) {
+      console.error('JSON parse error:', e);
+      throw new BadRequestException('The DTO payload is not valid JSON.');
+    }
+    if (file) {
+      updateMenuItemDto.image = `uploads/${file.filename}`;
+    } else {
+      throw new BadRequestException('Image file is required for this endpoint');
+    }
+    return this.menuItemService.update(id, updateMenuItemDto);
+  }
+
+  // =================================================================
+  // ⭐️ 5. PUT: Update an Item by ID (JSON only, no image) - NEW!
+  // ⚠️ IMPORTANT: This route MUST come AFTER @Put(':id/with-image')
   // =================================================================
   @Put(':id')
   async update(
-    @Param('id') id: string, 
-    @Body() updateMenuItemDto: UpdateMenuItemDto
+    @Param('id') id: string,
+    @Body() updateMenuItemDto: UpdateMenuItemDto,
   ): Promise<MenuItem> {
     return this.menuItemService.update(id, updateMenuItemDto);
   }
 
   // =================================================================
-  // 5. DELETE: Remove an Item by ID
+  // 6. DELETE: Remove an Item by ID
   // =================================================================
   @Delete(':id')
   async delete(@Param('id') id: string): Promise<MenuItem> {
     return this.menuItemService.delete(id);
+  }
+
+  // =================================================================
+  // 7. GET: Get Available Intensity Types and Configurations
+  // =================================================================
+  @Get('intensity-types/config')
+  getIntensityTypesConfig(): Record<string, { type: IntensityType; icon: string; defaultColor: string; label: string }> {
+    // Return all intensity types with their configurations for frontend
+    const config: Record<string, { type: IntensityType; icon: string; defaultColor: string; label: string }> = {};
+    Object.values(IntensityType).forEach(type => {
+      const typeConfig = INTENSITY_CONFIG_MAP[type];
+      config[type] = {
+        type,
+        icon: typeConfig.icon,
+        defaultColor: typeConfig.defaultColor,
+        label: typeConfig.label,
+      };
+    });
+    return config;
   }
 }

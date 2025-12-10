@@ -13,7 +13,7 @@ export class CreateEventDto {
   @IsDateString()
   date_fin: string;
 
-  @IsUrl()
+  @IsString()
   @IsOptional()
   image?: string; // URL de l'image (optionnelle)
 

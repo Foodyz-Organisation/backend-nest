@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -75,4 +76,32 @@ export class OrderController {
   ) {
     return this.orderService.updateStatus(orderId, dto);
   }
+
+  @Delete('user/:userId')  // ✅ Must be BEFORE @Delete(':id')
+  async deleteAllOrdersByUser(@Param('userId') userId: string): Promise<{ message: string }> {
+    await this.orderService.deleteAllOrdersByUser(userId);
+    return { message: 'All orders deleted successfully' };
+  }
+
+  // -----------------------------
+  // DELETE ALL ORDERS FOR PROFESSIONAL
+  // -----------------------------
+@Delete('professional/:professionalId')
+async deleteAllOrdersByProfessional(
+  @Param('professionalId') professionalId: string
+): Promise<{ message: string }> {
+  await this.orderService.deleteAllOrdersByProfessional(professionalId);
+  return { message: 'All completed orders deleted successfully' };
+}
+
+  // -----------------------------
+  // DELETE SINGLE ORDER
+  // -----------------------------
+  @Delete(':id')  // ✅ Generic route comes LAST
+  async deleteOrder(@Param('id') orderId: string): Promise<{ message: string }> {
+    await this.orderService.deleteOrder(orderId);
+    return { message: 'Order deleted successfully' };
+  }
+
+  
 }

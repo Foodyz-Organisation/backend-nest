@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { OrderType } from './enums/order-type.enum';
 import { OrderStatus } from './enums/order-status.enum';
+import { IntensityType } from '../../menuitem/schema/intensity-type.enum';
 
 export type OrderDocument = Order & Document;
 
@@ -17,8 +18,23 @@ export class OrderItem {
   @Prop({ required: true })
   quantity: number;
 
-  @Prop({ type: [{ name: String, isDefault: Boolean }], default: [] })
-  chosenIngredients: { name: string; isDefault: boolean }[];
+  @Prop({ 
+    type: [{ 
+      name: String, 
+      isDefault: Boolean,
+      intensityType: { type: String, enum: Object.values(IntensityType), required: false },
+      intensityColor: { type: String, required: false },
+      intensityValue: { type: Number, min: 0, max: 1, required: false } // ✅ ADD THIS
+    }], 
+    default: [] 
+  })
+  chosenIngredients: { 
+    name: string; 
+    isDefault: boolean;
+    intensityType?: IntensityType;
+    intensityColor?: string;
+    intensityValue?: number; // ✅ ADD THIS (0.0 to 1.0)
+  }[];
 
   @Prop({ type: [{ name: String, price: Number }], default: [] })
   chosenOptions: { name: string; price: number }[];

@@ -10,6 +10,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { OrderType } from '../schema/enums/order-type.enum';
+import { IntensityType } from '../../menuitem/schema/intensity-type.enum';
 
 // DTO for OrderItem - matches CartItem structure
 class OrderItemDto {
@@ -26,7 +27,13 @@ class OrderItemDto {
 
   @IsArray()
   @IsOptional()
-  chosenIngredients?: { name: string; isDefault: boolean }[];
+  chosenIngredients?: { 
+    name: string; 
+    isDefault: boolean;
+    intensityType?: IntensityType;
+    intensityColor?: string;
+    intensityValue?: number; // ✅ ADD THIS
+  }[];
 
   @IsArray()
   @IsOptional()

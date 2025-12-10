@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { IsNotEmpty } from 'class-validator';
 import { Document, Types } from 'mongoose';
 import { UserAccount } from 'src/useraccount/schema/useraccount.schema';
+import { IntensityType } from '../../menuitem/schema/intensity-type.enum';
 
 export type CartDocument = Cart & Document;
 
@@ -16,8 +16,24 @@ export class CartItem {
   @Prop({ required: true })
   name: string;
 
-  @Prop({ type: [{ name: String, isDefault: Boolean }], _id: false })
-  chosenIngredients: { name: string; isDefault: boolean }[];
+@Prop({
+    type: [{
+      name: String,
+      isDefault: Boolean,
+      intensityType: { type: String, enum: Object.values(IntensityType), required: false },
+      intensityColor: { type: String, required: false },
+      intensityValue: { type: Number, min: 0, max: 1, required: false }, // ✅ ADD THIS
+    }],
+    _id: false,
+  })
+  chosenIngredients: {
+    name: string;
+    isDefault: boolean;
+    intensityType?: IntensityType;
+    intensityColor?: string;
+    intensityValue?: number; // ✅ ADD THIS (0.0 to 1.0)
+  }[];
+
 
   @Prop({ type: [{ name: String, price: Number }], _id: false })
   chosenOptions: { name: string; price: number }[];

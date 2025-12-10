@@ -17,10 +17,33 @@ import { UserAccount, UserDocument } from '../useraccount/schema/useraccount.sch
 import { ProfessionalAccount, ProfessionalDocument } from 'src/professionalaccount/schema/professionalaccount.schema';
 import { Save, SaveDocument } from './schemas/save.schema';
 import { Like, LikeDocument } from './schemas/like.schema';
+import { execSync } from 'child_process';
 
 type MulterFile = Express.Multer.File;
 
 
+let ffprobePath: string;
+try {
+  ffprobePath = execSync('which ffprobe', { encoding: 'utf-8' }).trim();
+  ffmpeg.setFfprobePath(ffprobePath);
+  console.log(`✅ FFprobe found at: ${ffprobePath}`);
+} catch (error) {
+  console.error('❌ FFprobe not found in PATH');
+  // Fallback to common locations
+  ffmpeg.setFfprobePath('/opt/homebrew/bin/ffprobe'); // macOS Homebrew
+}
+
+// Same for ffmpeg
+let ffmpegPath: string;
+try {
+  ffmpegPath = execSync('which ffmpeg', { encoding: 'utf-8' }).trim();
+  ffmpeg.setFfmpegPath(ffmpegPath);
+  console.log(`✅ FFmpeg found at: ${ffmpegPath}`);
+} catch (error) {
+  console.error('❌ FFmpeg not found in PATH');
+  ffmpeg.setFfmpegPath('/opt/homebrew/bin/ffmpeg'); // macOS Homebrew
+}
+// ===== End FFmpeg Configuration =====
 
 
 @Injectable()
@@ -292,22 +315,6 @@ async update(
     });
   }
 
- // src/posts/posts.service.ts
-
-// ... (existing imports and other methods) ...
-// src/posts/posts.service.ts
-
-// ... (your existing imports, constructor, and other methods) ...
-// Make sure you have 'Types' and 'SortOrder' imported from 'mongoose'
-// import { Model, Types, SortOrder } from 'mongoose';
-
-// src/posts/posts.service.ts (ONLY the getReelsFeed method)
-
-// ... (your existing imports, constructor, and other methods) ...
-
-// src/posts/posts.service.ts
-
-// ... (your existing imports, constructor, and other methods) ...
 
 async getReelsFeed(
     limit: number,
@@ -353,11 +360,6 @@ async getReelsFeed(
     return reels as PostDocument[];
 }
 
-// ... (rest of your service methods) ...
-
-
-
-// ... (rest of your service methods) ...
 
 
   async incrementReelView(id: Types.ObjectId): Promise<PostDocument> {
@@ -436,11 +438,10 @@ async getReelsFeed(
       return updatedPost as PostDocument; // Assert type here
     }
 
-    // --- Methods for Saves ---
     async addSave(postId: Types.ObjectId, userId: Types.ObjectId): Promise<PostDocument> {
       const post = await this.postModel.findById(postId);
       if (!post) {
-        throw new NotFoundException(`Post with ID "${postId}" not found.`);
+        throw new NotFoundException('Post with ID "${postId}" not found.');
       }
 
       const existingSave = await this.saveModel.findOne({ postId, userId });
@@ -459,7 +460,7 @@ async getReelsFeed(
       }
       await updatedPost.populate({
           path: 'ownerId',
-          model: updatedPost.ownerModel, // <-- RE-INTRODUCED
+          model: updatedPost.ownerModel, 
           select: '_id username fullName profilePictureUrl followerCount followingCount email professionalData.fullName professionalData.licenseNumber professionalData.profilePictureUrl',
       });
       return updatedPost as PostDocument;  }
@@ -560,18 +561,7 @@ async createComment(
       await post.save();
     }
   }
-  // --- END COMMENTS METHODS ---
-
-
-
-
-   // src/posts/posts.service.ts
-
-// ... (your existing imports, constructor, and other methods) ...
-
-   // src/posts/posts.service.ts
-
-// ... (your existing imports, constructor, and other methods) ...
+ 
 
     async getTrendingPosts(limit: number = 10): Promise<PostDocument[]> {
     // 1. Perform the aggregation to calculate scores, sort, and limit.
@@ -634,10 +624,37 @@ async createComment(
 
     return trendingPosts as PostDocument[]; // Assert type here
   }
+  
+  async getSavedPosts(userId: Types.ObjectId): Promise<PostDocument[]> {
+      // Step 1: Find all saves for the user
+      const saves = await this.saveModel.find({ userId }).exec();
+      
+      if (saves.length === 0) {
+        return [];
+      }
 
-// ... (rest of your service methods) ...
+      // Step 2: Extract post IDs from saves
+      const postIds = saves.map(save => save.postId);
 
+      // Step 3: Fetch all posts by their IDs
+      const posts = await this.postModel.find({ _id: { $in: postIds } })
+        .sort({ createdAt: -1 }) // Sort by newest first
+        .exec();
 
-// ... (rest of your service methods) ...
+      // Step 4: Populate ownerId for each post based on its ownerModel
+      await Promise.all(posts.map(post => post.populate({
+        path: 'ownerId',
+        model: post.ownerModel, // Use the post's own ownerModel field
+        select: '_id username fullName profilePictureUrl followerCount followingCount email professionalData.fullName professionalData.licenseNumber professionalData.profilePictureUrl'
+      })));
+
+      // Step 5: Fetch and attach comments for each post
+      await Promise.all(posts.map(async (post) => {
+        const comments = await this.getComments(post._id as Types.ObjectId);
+        post.comments = comments;
+      }));
+
+      return posts as PostDocument[];
+    }
 
 }

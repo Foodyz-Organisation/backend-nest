@@ -139,4 +139,37 @@ async getPendingOrders(professionalId: string): Promise<Order[]> {
     );
   }
 }
+
+async deleteOrder(orderId: string): Promise<void> {
+  const order = await this.orderModel.findById(orderId);
+  
+  if (!order) {
+    throw new NotFoundException('Order not found');
+  }
+  
+  // Only allow deletion if status is PENDING or CONFIRMED
+  if (order.status !== OrderStatus.PENDING && order.status !== OrderStatus.CONFIRMED) {
+    throw new BadRequestException('Cannot delete order with status: ' + order.status);
+  }
+  
+  await this.orderModel.findByIdAndDelete(orderId);
+}
+
+// -----------------------------
+// DELETE ALL ORDERS FOR USER
+// -----------------------------
+async deleteAllOrdersByUser(userId: string): Promise<void> {
+  await this.orderModel.deleteMany({ userId });
+}
+
+// -----------------------------
+// DELETE ALL ORDERS FOR PROFESSIONAL
+// -----------------------------
+async deleteAllOrdersByProfessional(professionalId: string): Promise<void> {
+  // Only delete orders with status COMPLETED
+  await this.orderModel.deleteMany({ 
+    professionalId,
+    status: OrderStatus.COMPLETED  // ✅ Only delete completed orders
+  });
+}
 }
