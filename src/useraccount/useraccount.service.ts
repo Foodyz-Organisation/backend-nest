@@ -14,7 +14,7 @@ export class UsersService {
   constructor(
     @InjectModel(UserAccount.name) private userModel: Model<UserDocument>,
     @InjectModel(Post.name) private postModel: Model<PostDocument>, // Inject Post model
-  ) {}
+  ) { }
 
   // Create user
   async create(createUserDto: CreateUserDto): Promise<UserAccount> {
@@ -25,6 +25,18 @@ export class UsersService {
   // Find all users
   async findAll(): Promise<UserAccount[]> {
     return this.userModel.find().exec();
+  }
+
+  // Search users by username or fullName
+  async search(query: string): Promise<UserAccount[]> {
+    const regex = new RegExp(query, 'i'); // Case-insensitive regex
+    return this.userModel.find({
+      $or: [
+        { username: { $regex: regex } },
+        { fullName: { $regex: regex } },
+        { email: { $regex: regex } }
+      ]
+    }).limit(20).exec();
   }
 
   // Find one user by ID
@@ -41,47 +53,47 @@ export class UsersService {
     return user;
   }
   async findById(id: string): Promise<UserDocument> {
-  const user = await this.userModel.findById(id).exec();
-  if (!user) throw new NotFoundException('Utilisateur non trouvé');
-  return user;
-}
+    const user = await this.userModel.findById(id).exec();
+    if (!user) throw new NotFoundException('Utilisateur non trouvé');
+    return user;
+  }
 
 
 
   // Update user
   async update(id: string, updateUserDto: UpdateUserDto): Promise<UserAccount> {
-  const user = await this.userModel.findById(id).exec();
-  if (!user) throw new NotFoundException('User not found');
+    const user = await this.userModel.findById(id).exec();
+    if (!user) throw new NotFoundException('User not found');
 
-  // Update normal fields
-  if (updateUserDto.username !== undefined) user.username = updateUserDto.username;
-  if (updateUserDto.phone !== undefined) user.phone = updateUserDto.phone;
-  if (updateUserDto.address !== undefined) user.address = updateUserDto.address;
-  if (updateUserDto.email !== undefined) user.email = updateUserDto.email;
-  if (updateUserDto.isActive !== undefined) user.isActive = updateUserDto.isActive;
-  if (updateUserDto.profilePictureUrl !== undefined) user.profilePictureUrl = updateUserDto.profilePictureUrl;
+    // Update normal fields
+    if (updateUserDto.username !== undefined) user.username = updateUserDto.username;
+    if (updateUserDto.phone !== undefined) user.phone = updateUserDto.phone;
+    if (updateUserDto.address !== undefined) user.address = updateUserDto.address;
+    if (updateUserDto.email !== undefined) user.email = updateUserDto.email;
+    if (updateUserDto.isActive !== undefined) user.isActive = updateUserDto.isActive;
+    if (updateUserDto.profilePictureUrl !== undefined) user.profilePictureUrl = updateUserDto.profilePictureUrl;
 
-  // Handle password separately: hash it
-  if (updateUserDto.password !== undefined) {
-    const salt = await bcrypt.genSalt();
-    user.password = await bcrypt.hash(updateUserDto.password, salt);
+    // Handle password separately: hash it
+    if (updateUserDto.password !== undefined) {
+      const salt = await bcrypt.genSalt();
+      user.password = await bcrypt.hash(updateUserDto.password, salt);
+    }
+
+    // Save the document (triggers pre-save hooks if any)
+    const updatedUser = await user.save();
+
+    return updatedUser;
   }
-
-  // Save the document (triggers pre-save hooks if any)
-  const updatedUser = await user.save();
-
-  return updatedUser;
-}
 
   // Delete user (Toggle active status)
   async toggleActive(id: string): Promise<UserAccount> {
     const user = await this.userModel.findById(id).exec();
     if (!user) throw new NotFoundException('User not found');
-  
+
     user.isActive = !user.isActive; // toggle the boolean
     return user.save();
   }
-  
+
   /**
    * Retrieves a comprehensive profile for a given user.
    * Includes user details and post count.
@@ -119,7 +131,7 @@ export class UsersService {
 
     return userProfile;
   }
-async updateProfilePicture(id: string, path: string): Promise<UserAccount> {
+  async updateProfilePicture(id: string, path: string): Promise<UserAccount> {
     const updatedUser = await this.userModel.findByIdAndUpdate(
       id,
       { profilePictureUrl: path },

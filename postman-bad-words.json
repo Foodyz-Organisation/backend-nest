@@ -1,0 +1,158 @@
+{
+  "info": {
+    "name": "Bad Words Detection API Tests",
+    "description": "Collection de tests pour l'API de détection des mots inappropriés",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Chat Management",
+      "item": [
+        {
+          "name": "Test Bad Words Detection",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Ceci est un message de test avec des mots inappropriés\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chat/test/bad-words",
+              "host": ["{{base_url}}"],
+              "path": ["chat", "test", "bad-words"]
+            },
+            "description": "Teste la détection et la modération des mots inappropriés dans un message"
+          },
+          "response": []
+        },
+        {
+          "name": "Check Gradio Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/chat/test/gradio-status",
+              "host": ["{{base_url}}"],
+              "path": ["chat", "test", "gradio-status"]
+            },
+            "description": "Vérifie la disponibilité de l'API Gradio et du filtre local"
+          },
+          "response": []
+        },
+        {
+          "name": "Add Custom Bad Words",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"words\": [\"spam\", \"arnaque\", \"scam\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chat/admin/bad-words/add",
+              "host": ["{{base_url}}"],
+              "path": ["chat", "admin", "bad-words", "add"]
+            },
+            "description": "Ajoute des mots personnalisés au filtre de détection"
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Words from Filter",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"words\": [\"hell\", \"damn\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chat/admin/bad-words/remove",
+              "host": ["{{base_url}}"],
+              "path": ["chat", "admin", "bad-words", "remove"]
+            },
+            "description": "Retire des mots du filtre (utile pour les faux positifs)"
+          },
+          "response": []
+        },
+        {
+          "name": "Send Message with Moderation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Test message\",\n  \"type\": \"text\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/chat/conversations/{{conversation_id}}/messages",
+              "host": ["{{base_url}}"],
+              "path": ["chat", "conversations", "{{conversation_id}}", "messages"]
+            },
+            "description": "Envoie un message qui sera automatiquement analysé et modéré si nécessaire"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "conversation_id",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

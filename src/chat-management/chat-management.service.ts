@@ -33,7 +33,7 @@ export class ChatManagementService {
     @InjectModel(UserAccount.name) private userModel: Model<UserDocument>,
     @InjectModel(ProfessionalAccount.name)
     private profModel: Model<ProfessionalDocument>,
-  ) {}
+  ) { }
 
   async getChatsForUser(userId: string) {
     const userObjectId = this.ensureObjectId(userId);
@@ -64,15 +64,18 @@ export class ChatManagementService {
         : [],
     ]);
 
-    const participantNames = new Map<string, string>();
+    const participantNames = new Map<string, { name: string; avatarUrl: string }>();
     users.forEach((user: any) => {
-      participantNames.set(user._id.toString(), user.username || user.email || 'User');
+      participantNames.set(user._id.toString(), {
+        name: user.username || user.email || 'User',
+        avatarUrl: user.profilePictureUrl || '',
+      });
     });
     professionals.forEach((prof: any) => {
-      participantNames.set(
-        prof._id.toString(),
-        prof.professionalData?.fullName || prof.email || 'Professional',
-      );
+      participantNames.set(prof._id.toString(), {
+        name: prof.professionalData?.fullName || prof.email || 'Professional',
+        avatarUrl: prof.professionalData?.avatarUrl || '',
+      });
     });
 
     const chats = await Promise.all(
@@ -87,14 +90,19 @@ export class ChatManagementService {
           .map((participantId: Types.ObjectId) => participantId?.toString())
           .filter((id: string | undefined) => id && id !== userObjectId.toString()) as string[];
 
+        const otherParticipant = otherIds.length > 0 ? participantNames.get(otherIds[0]) : null;
+
         const displayName =
           (conv.title || '').trim() ||
-          otherIds.map((id) => participantNames.get(id)).filter(Boolean).join(', ') ||
+          otherParticipant?.name ||
           'Conversation';
+
+        const displayAvatar = otherParticipant?.avatarUrl || '';
 
         return {
           id: conv._id.toString(),
           name: displayName,
+          avatarUrl: displayAvatar,
           message: lastMessage?.content || 'No message yet',
           time:
             lastMessage?.createdAt?.toISOString?.() ||
