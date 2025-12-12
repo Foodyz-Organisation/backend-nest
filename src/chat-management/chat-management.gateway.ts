@@ -17,8 +17,7 @@ import { CreateMessageDto } from './dto/create-message.dto';
 
 @WebSocketGateway({ cors: true })
 export class ChatManagementGateway
-  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
-{
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
@@ -29,7 +28,7 @@ export class ChatManagementGateway
     private readonly spamDetectionService: SpamDetectionService,
     private readonly badWordsDetectionService: BadWordsDetectionService,
     private readonly jwtService: JwtService,
-  ) {}
+  ) { }
 
   afterInit() {
     this.logger.log('Chat Gateway initialized');
@@ -56,7 +55,7 @@ export class ChatManagementGateway
   async handleSendMessage(client: Socket, payload: CreateMessageDto) {
     try {
       const senderId = client.data.userId || this.extractUserId(client);
-      
+
       // 🔍 Analyze message for spam
       const spamAnalysis = await this.spamDetectionService.analyzeMessage({
         content: payload.content,
@@ -139,5 +138,53 @@ export class ChatManagementGateway
     }
 
     return userId;
+  }
+
+  // 📞 WebRTC Signaling Events
+
+  @SubscribeMessage('call_user')
+  handleCallUser(client: Socket, payload: { conversationId: string; offer: any }) {
+    this.logger.debug(`Call initiated in conversation ${payload.conversationId} by ${client.id}`);
+    client.to(payload.conversationId).emit('call_made', {
+      offer: payload.offer,
+      socket: client.id,
+      userId: client.data.userId,
+    });
+  }
+
+  @SubscribeMessage('make_answer')
+  handleMakeAnswer(client: Socket, payload: { to: string; answer: any }) {
+    this.logger.debug(`Call answered by ${client.id} to ${payload.to}`);
+    this.server.to(payload.to).emit('answer_made', {
+      answer: payload.answer,
+      socket: client.id,
+      userId: client.data.userId,
+    });
+  }
+
+  @SubscribeMessage('ice_candidate')
+  handleIceCandidate(client: Socket, payload: { to: string; candidate: any }) {
+    this.logger.debug(`ICE candidate from ${client.id} to ${payload.to}`);
+    this.server.to(payload.to).emit('ice_candidate_received', {
+      candidate: payload.candidate,
+      socket: client.id,
+      userId: client.data.userId,
+    });
+  }
+
+  @SubscribeMessage('end_call')
+  handleEndCall(client: Socket, payload: { conversationId: string }) {
+    this.logger.debug(`Call ended in conversation ${payload.conversationId}`);
+    client.to(payload.conversationId).emit('call_ended', {
+      userId: client.data.userId,
+    });
+  }
+
+  @SubscribeMessage('decline_call')
+  handleDeclineCall(client: Socket, payload: { conversationId: string }) {
+    this.logger.debug(`Call declined in conversation ${payload.conversationId} by ${client.id}`);
+    client.to(payload.conversationId).emit('call_declined', {
+      userId: client.data.userId,
+    });
   }
 }

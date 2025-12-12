@@ -126,4 +126,120 @@ export class ChatManagementController {
     const beforeDate = before ? new Date(before) : undefined;
     return this.chatService.getMessagesForUser(id, userId, lim, beforeDate);
   }
-}
+  // 🔹 Tester la détection de mots inappropriés
+  @Post('test/bad-words')
+  async testBadWords(@Body() body: { content: string }) {
+    const result = await this.badWordsDetectionService.moderateMessage(
+      body.content,
+      'test-conversation',
+      'test-user',
+    );
+    return {
+      original: result.originalContent,
+      moderated: result.moderatedContent,
+      wasModified: result.wasModified,
+      detectionMethod: result.detectionMethod,
+    };
+  }
+
+  // 🔹 Vérifier la disponibilité de l'API Gradio
+  @Get('test/gradio-status')
+  async checkGradioStatus() {
+    const isAvailable = await this.badWordsDetectionService.isApiAvailable();
+    return {
+      gradioApi: {
+        available: isAvailable,
+        status: isAvailable ? 'online' : 'offline',
+      },
+      localFilter: {
+        available: true,
+        status: 'active',
+      },
+    };
+  }
+
+  // 🔹 Ajouter des mots personnalisés au filtre
+  @Post('admin/bad-words/add')
+  async addCustomWords(@Body() body: { words: string[] }) {
+    this.badWordsDetectionService.addCustomWords(body.words);
+    return {
+      success: true,
+      message: `Added ${body.words.length} custom words to filter`,
+    };
+  }
+
+  // 🔹 Retirer des mots du filtre
+  @Post('admin/bad-words/remove')
+  async removeWords(@Body() body: { words: string[] }) {
+    this.badWordsDetectionService.removeWords(body.words);
+    return {
+      success: true,
+      message: `Removed ${body.words.length} words from filter`,
+    };
+  }
+
+  // 🔹 Tester la détection de spam
+  @Post('test/spam-detection')
+  async testSpamDetection(@Body() body: { content: string }) {
+    const result = await this.spamDetectionService.analyzeMessage({
+      content: body.content,
+      conversationId: 'test-conversation',
+      senderId: 'test-user',
+    });
+    return {
+      content: body.content,
+      isSpam: result.is_spam,
+      prediction: result.prediction,
+      confidence: result.confidence,
+      isFiltered: this.spamDetectionService.shouldFilterMessage(result),
+      message: result.message,
+    };
+  }
+
+  // 🔹 Analyser plusieurs messages en lot
+  @Post('test/spam-batch')
+  async testSpamBatch(@Body() body: { messages: string[] }) {
+    const messagesWithIds = body.messages.map((content) => ({
+      content,
+      conversationId: 'test-batch',
+      senderId: 'test-user',
+    }));
+    
+    const results = await this.spamDetectionService.analyzeMessagesBatch(
+      messagesWithIds,
+    );
+    
+    return {
+      total: body.messages.length,
+      results: results.map((result, index) => ({
+        message: body.messages[index],
+        isSpam: result.is_spam,
+        prediction: result.prediction,
+        confidence: result.confidence,
+        isFiltered: this.spamDetectionService.shouldFilterMessage(result),
+      })),
+    };
+  }
+
+  // 🔹 Vérifier le statut du service de détection de spam
+  @Get('test/spam-status')
+  async checkSpamServiceStatus() {
+    const status = await this.spamDetectionService.getStatus();
+    return {
+      spamDetectionService: {
+        available: status.available,
+        status: status.available ? 'online' : 'offline',
+        endpoint: status.endpoint || 'http://localhost:8000',
+        lastCheck: status.lastCheck,
+      },
+      filterThreshold: 0.7,
+      testConnection: status.available,
+    };
+  }
+
+  // 🔹 Tester la connexion au service FastAPI
+  @Get('test/spam-connection')
+  async testSpamConnection() {
+    const result = await this.spamDetectionService.checkConnection();
+    return result;
+  }}

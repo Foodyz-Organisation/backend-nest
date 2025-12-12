@@ -154,7 +154,7 @@ export class SpamDetectionService {
   /**
    * Get spam detection status
    */
-  async getStatus(): Promise<{ status: string; available: boolean }> {
+  async getStatus(): Promise<{ status: string; available: boolean; endpoint?: string; lastCheck?: string }> {
     try {
       const response = await fetch(`${this.spamApiUrl}/health`, {
         method: 'GET',
@@ -166,6 +166,8 @@ export class SpamDetectionService {
         return {
           status: data.status,
           available: data.models_loaded,
+          endpoint: this.spamApiUrl,
+          lastCheck: new Date().toISOString(),
         };
       }
     } catch (error) {
@@ -175,6 +177,53 @@ export class SpamDetectionService {
     return {
       status: 'error',
       available: false,
+      endpoint: this.spamApiUrl,
+      lastCheck: new Date().toISOString(),
     };
+  }
+
+  /**
+   * Test connection to spam detection service
+   */
+  async checkConnection(): Promise<{
+    success: boolean;
+    message: string;
+    endpoint: string;
+    responseTime?: number;
+  }> {
+    const startTime = Date.now();
+    
+    try {
+      const response = await fetch(`${this.spamApiUrl}/health`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const responseTime = Date.now() - startTime;
+
+      if (response.ok) {
+        return {
+          success: true,
+          message: 'FastAPI Spam Detection service is reachable',
+          endpoint: this.spamApiUrl,
+          responseTime,
+        };
+      } else {
+        return {
+          success: false,
+          message: `Service returned status ${response.status}`,
+          endpoint: this.spamApiUrl,
+          responseTime,
+        };
+      }
+    } catch (error) {
+      const responseTime = Date.now() - startTime;
+      return {
+        success: false,
+        message: `Connection failed: ${error.message}`,
+        endpoint: this.spamApiUrl,
+        responseTime,
+      };
+    }
   }
 }

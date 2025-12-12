@@ -1,5 +1,5 @@
 // src/user/user.controller.ts
-import { Controller, Get, Post, Body, Param, Patch, Delete, UseInterceptors, UploadedFile, Req, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Patch, Delete, UseInterceptors, UploadedFile, Req, BadRequestException, Query } from '@nestjs/common';
 import { UsersService } from './useraccount.service';
 import { CreateUserDto } from './dto/create-useraccount.dto';
 import { UpdateUserDto } from './dto/update-useraccount.dto';
@@ -13,7 +13,7 @@ import { ImageUploadService } from 'src/menuitem/imageuploadservice'; // ⭐ Adj
 @ApiTags('users') // Group endpoints under 'users' tag in Swagger
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly usersService: UsersService) { }
 
   @Post()
   @ApiOperation({ summary: 'Create a new user account' })
@@ -28,6 +28,14 @@ export class UsersController {
   @ApiResponse({ status: 200, description: 'List of all users' })
   findAll() {
     return this.usersService.findAll();
+  }
+
+  @Get('search')
+  @ApiOperation({ summary: 'Search users by username, fullName or email' })
+  @ApiResponse({ status: 200, description: 'List of matching users' })
+  search(@Query('q') query: string) {
+    if (!query) return [];
+    return this.usersService.search(query);
   }
 
   @Get(':id')
@@ -73,11 +81,11 @@ export class UsersController {
       throw new BadRequestException('Invalid user ID format.');
     }
     return this.usersService.getProfile(id);
-  }  
+  }
   @Patch(':id/upload-profile-image')
   @UseInterceptors(
     // 'file' is the key expected in the form-data request body
-    FileInterceptor('file', ImageUploadService.getMulterConfig()), 
+    FileInterceptor('file', ImageUploadService.getMulterConfig()),
   )
   async uploadProfileImage(
     @Param('id') id: string,
