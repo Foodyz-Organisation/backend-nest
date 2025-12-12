@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Get, Param, Put, Res, StreamableFile } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Get, Param, Put, Res, StreamableFile, Logger } from '@nestjs/common';
 import type { Response } from 'express';
 import { ReclamationService } from './reclamation.service';
 import { LoyaltyService, PointsBalance, Reward } from 'src/reclamation/LoyaltyService';
@@ -7,6 +7,10 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/user.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { RespondReclamationDto } from './dto/respond-reclamation.dto';
+import { OrderService } from '../order/order.service';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { ProfessionalAccount } from '../professionalaccount/schema/professionalaccount.schema';
 import * as fs from 'fs';
 import * as path from 'path';
 import { createReadStream } from 'fs';
@@ -14,10 +18,14 @@ import { createReadStream } from 'fs';
 @ApiTags('Reclamation')
 @Controller('reclamation')
 export class ReclamationController {
+  private readonly logger = new Logger(ReclamationController.name);
+
   constructor(
     private readonly reclamationService: ReclamationService,
     private readonly loyaltyService: LoyaltyService,
-  ) {}
+    private readonly orderService: OrderService,
+    @InjectModel(ProfessionalAccount.name) private professionalModel: Model<ProfessionalAccount>,
+  ) { }
 
   // ✅ NOUVELLE ROUTE: Servir les images manuellement
   @Get('image/:filename')
@@ -27,39 +35,39 @@ export class ReclamationController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
     const imagePath = path.join(process.cwd(), 'uploads', 'reclamations', filename);
-    
+
     console.log('📷 Requête image:', filename);
     console.log('📁 Chemin complet:', imagePath);
     console.log('✅ Fichier existe:', fs.existsSync(imagePath));
-    
+
     if (!fs.existsSync(imagePath)) {
       console.error('❌ Fichier introuvable:', imagePath);
       throw new Error('Image not found');
     }
-    
+
     const ext = path.extname(filename).toLowerCase();
     let contentType = 'image/jpeg';
-    
+
     if (ext === '.png') contentType = 'image/png';
     else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
     else if (ext === '.gif') contentType = 'image/gif';
     else if (ext === '.webp') contentType = 'image/webp';
-    
+
     console.log('📄 Content-Type:', contentType);
-    
+
     res.set({
       'Content-Type': contentType,
       'Access-Control-Allow-Origin': '*',
       'Cache-Control': 'public, max-age=31536000',
     });
-    
+
     const file = createReadStream(imagePath);
     console.log('✅ Image servie avec succès');
-    
+
     return new StreamableFile(file);
   }
 
-  // ✅ CRÉER une réclamation (CLIENT) - AVEC UPLOAD BASE64
+  // ✅ CRÉER une réclamation (CLIENT) - AVEC UPLOAD BASE64 ET ASSOCIATION RESTAURANT
   @Post()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
@@ -70,28 +78,28 @@ export class ReclamationController {
     @Body() createReclamationDto: CreateReclamationDto,
     @CurrentUser() user: any,
   ) {
-    console.log('🔐 User from token:', user);
-    console.log('📝 DTO received:', createReclamationDto);
-    console.log('📸 Photos reçues:', createReclamationDto.photos?.length || 0);
+    this.logger.log('🔐 User from token:', user);
+    this.logger.log('📝 DTO received:', createReclamationDto);
+    this.logger.log('📸 Photos reçues:', createReclamationDto.photos?.length || 0);
 
     const photoPaths: string[] = [];
-    
+
     if (createReclamationDto.photos && createReclamationDto.photos.length > 0) {
       const uploadDir = './uploads/reclamations';
-      
+
       if (!fs.existsSync(uploadDir)) {
         fs.mkdirSync(uploadDir, { recursive: true });
       }
 
       for (let i = 0; i < createReclamationDto.photos.length; i++) {
         let base64Data = createReclamationDto.photos[i];
-        
+
         try {
-          console.log(`📷 Image ${i + 1} - Longueur:`, base64Data.length);
-          
+          this.logger.log(`📷 Image ${i + 1} - Longueur:`, base64Data.length);
+
           let ext = 'jpeg';
           let data = base64Data;
-          
+
           const matchesComplete = base64Data.match(/^data:image\/(\w+);base64,(.+)$/);
           if (matchesComplete) {
             ext = matchesComplete[1];
@@ -108,23 +116,50 @@ export class ReclamationController {
               data = base64Data.split(',')[1];
             }
           }
-          
+
           const filename = `${Date.now()}-${i}-${Math.round(Math.random() * 1e9)}.${ext}`;
           const filepath = path.join(uploadDir, filename);
-          
+
           fs.writeFileSync(filepath, Buffer.from(data, 'base64'));
-          
+
           photoPaths.push(`/reclamation/image/${filename}`);
-          console.log(`✅ Image ${i + 1} sauvegardée: ${filename}`);
-          console.log(`📍 URL: /reclamation/image/${filename}`);
+          this.logger.log(`✅ Image ${i + 1} sauvegardée: ${filename}`);
+          this.logger.log(`📍 URL: /reclamation/image/${filename}`);
         } catch (error) {
-          console.error(`❌ Erreur sauvegarde image ${i + 1}:`, error);
+          this.logger.error(`❌ Erreur sauvegarde image ${i + 1}:`, error);
         }
       }
     }
 
-    const restaurantEmail = 'menyar.benghorbel@esprit.tn'.trim().toLowerCase();
-    
+    // ✅ NOUVEAU: Récupérer le restaurant depuis la commande
+    let restaurantEmail = 'unknown@restaurant.com';
+    let restaurantId: string | undefined = undefined;
+
+    try {
+      this.logger.log(`🔍 Recherche de la commande: ${createReclamationDto.commandeConcernee}`);
+
+      const order = await this.orderService.getOrderById(createReclamationDto.commandeConcernee);
+
+      if (order && order.professionalId) {
+        this.logger.log(`✅ Commande trouvée, professionalId: ${order.professionalId}`);
+
+        // Récupérer les infos du professionnel
+        const professional = await this.professionalModel.findById(order.professionalId).lean();
+
+        if (professional) {
+          restaurantEmail = professional.email?.trim().toLowerCase() || restaurantEmail;
+          restaurantId = professional._id.toString();
+          this.logger.log(`✅ Restaurant trouvé: ${restaurantEmail} (ID: ${restaurantId})`);
+        } else {
+          this.logger.warn(`⚠️ Professionnel non trouvé pour ID: ${order.professionalId}`);
+        }
+      } else {
+        this.logger.warn(`⚠️ Commande non trouvée ou sans professionalId`);
+      }
+    } catch (error) {
+      this.logger.error(`❌ Erreur récupération restaurant:`, error);
+    }
+
     const finalData = {
       description: createReclamationDto.description,
       commandeConcernee: createReclamationDto.commandeConcernee,
@@ -134,12 +169,12 @@ export class ReclamationController {
       emailClient: user.email,
       userId: user.userId,
       restaurantEmail: restaurantEmail,
-      restaurantId: '69245cbc871665d54c49a075'
+      restaurantId: restaurantId
     };
 
-    console.log('💾 Final data to save:', finalData);
-    console.log('📷 Photos sauvegardées:', photoPaths);
-    
+    this.logger.log('💾 Final data to save:', finalData);
+    this.logger.log('📷 Photos sauvegardées:', photoPaths);
+
     return this.reclamationService.create(finalData);
   }
 
@@ -166,10 +201,10 @@ export class ReclamationController {
   getMyRestaurantReclamations(@CurrentUser() user: any) {
     console.log('📩 Restaurant connecté:', user);
     console.log('📧 Restaurant email:', user.email);
-    
+
     const restaurantEmail = user.email.trim().toLowerCase();
     console.log('🔍 Recherche avec email normalisé:', restaurantEmail);
-    
+
     return this.reclamationService.findByRestaurantEmail(restaurantEmail);
   }
 
@@ -187,7 +222,7 @@ export class ReclamationController {
     console.log('🆔 Restaurant ID reçu:', restaurantId);
 
     let reclamations = await this.reclamationService.findByRestaurantId(restaurantId);
-    
+
     if (reclamations.length === 0) {
       console.log('⚠️ Aucune réclamation trouvée avec restaurantId');
       const restaurantEmail = user.email.trim().toLowerCase();

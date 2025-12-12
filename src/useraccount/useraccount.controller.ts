@@ -10,7 +10,7 @@ import { FileInterceptor } from '@nestjs/platform-express'; // Import FileInterc
 import { ImageUploadService } from 'src/menuitem/imageuploadservice'; // ⭐ Adjust this import path ⭐
 
 
-@ApiTags('users') // Group endpoints under 'users' tag in Swagger
+@ApiTags('users')// Group endpoints under 'users' tag in Swagger
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
