@@ -29,7 +29,7 @@ import {
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
-import { Post as PostSchema } from './schemas/post.schema';
+import { PostDocument, Post as PostSchema, FoodType } from './schemas/post.schema';
 // import { MulterFile } from '../common/types/multer-file.type'; // Removed as Express.Multer.File is used directly
 import { UploadResponseDto } from './dto/upload-response.dto';
 import { CreateCommentDto } from './dto/create-comment.dto'; // Ensure this is imported if used
@@ -184,6 +184,57 @@ export class PostsController {
       throw new BadRequestException('Invalid owner ID format.');
     }
     return this.postsService.findByOwnerId(new Types.ObjectId(ownerId));
+  }
+
+  // --- Get All Food Types --- (More specific path segment than :id)
+  @Get('food-types')
+  @ApiOperation({ 
+    summary: 'Get all available food types',
+    description: 'Returns an array of all available food types that can be used for filtering posts or creating new posts.'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Array of food type strings',
+    schema: {
+      type: 'array',
+      items: { type: 'string' },
+      example: ['Spicy', 'Healthy', 'Mashwi', 'Couscous', 'Street food', 'Fast food', 'Seafood', 'Fried', 'Desserts', 'Vegetarian-Friendly', 'Meat']
+    }
+  })
+  async getAllFoodTypes(): Promise<string[]> {
+    return this.postsService.getAllFoodTypes();
+  }
+
+  // --- Get Posts by Food Type --- (More specific path segment than :id)
+  @Get('by-food-type/:foodType')
+  @ApiOperation({ 
+    summary: 'Retrieve all posts filtered by food type',
+    description: 'Returns all posts that match the specified food type. Valid food types: Spicy, Healthy, Mashwi, Couscous, Street food, Fast food, Seafood, Fried, Desserts, Vegetarian-Friendly, Meat'
+  })
+  @ApiResponse({ status: 200, description: 'List of posts filtered by food type', type: [PostSchema] })
+  @ApiResponse({ status: 400, description: 'Invalid food type' })
+  async findByFoodType(@Param('foodType') foodType: string) {
+    return this.postsService.findByFoodType(foodType);
+  }
+
+  // --- Get Saved Posts (for normal users only) --- (More specific path segment than :id)
+  @Get('saved')
+  @ApiOperation({ summary: 'Get all saved posts for a normal user' })
+  @ApiResponse({ status: 200, description: 'List of saved posts with full details including comments', type: [PostSchema] })
+  @ApiResponse({ status: 400, description: 'Bad request (invalid user ID)' })
+  @ApiHeader({
+    name: 'x-user-id',
+    description: 'The ID of the normal user (UserAccount) retrieving their saved posts',
+    required: true,
+  })
+  async getSavedPosts(@Headers('x-user-id') userId: string): Promise<PostDocument[]> {
+    if (!userId) {
+      throw new BadRequestException('x-user-id header is required.');
+    }
+    if (!Types.ObjectId.isValid(userId)) {
+      throw new BadRequestException('Invalid user ID format.');
+    }
+    return this.postsService.getSavedPosts(new Types.ObjectId(userId));
   }
 
   // --- Get All Posts --- (General GET for the root path)
@@ -461,5 +512,5 @@ export class PostsController {
     return this.postsService.getComments(new Types.ObjectId(postId)); // <-- Pass ObjectId
   }
 
-
+  
 }

@@ -9,6 +9,20 @@ export enum MediaType {
   CAROUSEL = 'carousel',
 }
 
+export enum FoodType {
+  SPICY = 'Spicy',
+  HEALTHY = 'Healthy',
+  MASHWI = 'Mashwi',
+  COUSCOUS = 'Couscous',
+  STREET_FOOD = 'Street food',
+  FAST_FOOD = 'Fast food',
+  SEAFOOD = 'Seafood',
+  FRIED = 'Fried',
+  DESSERTS = 'Desserts',
+  VEGETARIAN_FRIENDLY = 'Vegetarian-Friendly',
+  MEAT = 'Meat',
+}
+
 @Schema({ timestamps: true })
 export class Post {
   _id?: Types.ObjectId;
@@ -29,6 +43,15 @@ export class Post {
 
   @Prop({ type: String, enum: MediaType, required: true })
   mediaType: MediaType;
+
+  @Prop({ type: String, enum: FoodType, required: true })
+  foodType: FoodType;
+
+  @Prop({ type: Number, required: false })
+  price?: number; // Price in TND (e.g., 30 or 6.9) - displayed as "30TND" or "6.9TND" on frontend
+
+  @Prop({ type: Number, required: false })
+  preparationTime?: number; // Preparation time in minutes (e.g., 15) - displayed as "15 minutes" on frontend
 
   // --- NEW FIELDS: Interaction Counts ---
   @Prop({ type: Number, default: 0 })

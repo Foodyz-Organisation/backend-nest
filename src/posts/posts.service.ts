@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Post, PostDocument, MediaType } from './schemas/post.schema';
+import { Post, PostDocument, MediaType, FoodType } from './schemas/post.schema';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UploadResponseDto } from './dto/upload-response.dto'; 
 import { UpdatePostDto } from './dto/update-post.dto';
@@ -164,6 +164,32 @@ async findOne(id: string): Promise<PostDocument>  {
     })));
 
     return posts as PostDocument[];
+  }
+
+  async findByFoodType(foodType: string): Promise<PostDocument[]> {
+    // Validate that the foodType is a valid enum value
+    if (!Object.values(FoodType).includes(foodType as FoodType)) {
+      throw new BadRequestException(
+        `Invalid food type. Must be one of: ${Object.values(FoodType).join(', ')}`
+      );
+    }
+
+    const posts = await this.postModel.find({ foodType: foodType })
+      .sort({ createdAt: -1 })
+      .exec();
+
+    await Promise.all(posts.map(post => post.populate({
+        path: 'ownerId',
+        model: post.ownerModel,
+        select: '_id username fullName profilePictureUrl followerCount followingCount email professionalData.fullName professionalData.licenseNumber professionalData.profilePictureUrl'
+    })));
+
+    return posts as PostDocument[];
+  }
+
+  async getAllFoodTypes(): Promise<string[]> {
+    // Return all FoodType enum values as an array
+    return Object.values(FoodType);
   }
 
 
@@ -490,6 +516,39 @@ async getReelsFeed(
       });
       return updatedPost as PostDocument;
      }
+
+    async getSavedPosts(userId: Types.ObjectId): Promise<PostDocument[]> {
+      // Step 1: Find all saves for the user
+      const saves = await this.saveModel.find({ userId }).exec();
+      
+      if (saves.length === 0) {
+        return [];
+      }
+
+      // Step 2: Extract post IDs from saves
+      const postIds = saves.map(save => save.postId);
+
+      // Step 3: Fetch all posts by their IDs
+      const posts = await this.postModel.find({ _id: { $in: postIds } })
+        .sort({ createdAt: -1 }) // Sort by newest first
+        .exec();
+
+      // Step 4: Populate ownerId for each post based on its ownerModel
+      await Promise.all(posts.map(post => post.populate({
+        path: 'ownerId',
+        model: post.ownerModel, // Use the post's own ownerModel field
+        select: '_id username fullName profilePictureUrl followerCount followingCount email professionalData.fullName professionalData.licenseNumber professionalData.profilePictureUrl'
+      })));
+
+      // Step 5: Fetch and attach comments for each post
+      await Promise.all(posts.map(async (post) => {
+        const comments = await this.getComments(post._id as Types.ObjectId);
+        post.comments = comments;
+      }));
+
+      return posts as PostDocument[];
+    }
+
     // --- END BOOKMARKS METHODS ---
 
   // ---  Methods for Comments ---
