@@ -43,24 +43,30 @@ export class AiValidationService {
   private readonly gemini: GoogleGenerativeAI;
   private readonly useVisionAPI: boolean;
   private workingModel: string | null = null;
-  
-  // Available model names (in order of preference)
+
+  // ✅ CORRECTION: Noms de modèles Gemini à jour (décembre 2024)
   private readonly MODELS_TO_TRY = [
-  'gemini-1.5-flash',
-  'gemini-1.5-pro',
-  'gemini-2.0-flash',
-  'gemini-2.0-pro'
-];
+    'gemini-1.5-flash-latest',
+    'gemini-1.5-pro-latest',
+    'gemini-1.5-flash-002',
+    'gemini-1.5-pro-002',
+    'gemini-1.5-flash',
+    'gemini-1.5-pro',
+    'gemini-pro',
+  ];
 
   constructor() {
     // Vérifier les variables d'environnement
     if (!process.env.GEMINI_API_KEY) {
+      this.logger.error('❌ GEMINI_API_KEY manquante dans .env');
       throw new Error('GEMINI_API_KEY manquante dans .env');
     }
 
+    this.logger.log(`🔑 GEMINI_API_KEY trouvée (${process.env.GEMINI_API_KEY.substring(0, 10)}...)`);
+
     // ✅ FIX 1: Vision API avec credentials file
     this.useVisionAPI = !!process.env.GOOGLE_APPLICATION_CREDENTIALS;
-    
+
     if (this.useVisionAPI) {
       try {
         this.visionClient = new ImageAnnotatorClient({
@@ -84,18 +90,85 @@ export class AiValidationService {
    * 🧪 Teste quel modèle fonctionne avec l'API key
    */
   private async testGeminiModel(): Promise<void> {
+    this.logger.log('🧪 Test des modèles Gemini...');
+    this.logger.log(`🔑 Clé API: ${process.env.GEMINI_API_KEY?.substring(0, 20)}...`);
+
+    // ✅ D'abord, lister les modèles disponibles
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${process.env.GEMINI_API_KEY}`
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        const availableModels = data.models
+          ?.filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
+          .map((m: any) => m.name.replace('models/', '')) || [];
+        
+        if (availableModels.length > 0) {
+          this.logger.log(`📋 Modèles disponibles: ${availableModels.join(', ')}`);
+          
+          // Tester le premier modèle disponible
+          for (const modelName of availableModels) {
+            if (await this.testSingleModel(modelName)) {
+              return;
+            }
+          }
+        }
+      } else {
+        this.logger.warn(`⚠️ Impossible de lister les modèles: ${response.status}`);
+      }
+    } catch (error: any) {
+      this.logger.warn(`⚠️ Erreur lors du listing: ${error.message}`);
+    }
+
+    // Fallback: tester les modèles connus
     for (const modelName of this.MODELS_TO_TRY) {
-      try {
-        const model = this.gemini.getGenerativeModel({ model: modelName });
-        await model.generateContent('test');
-        this.workingModel = modelName;
-        this.logger.log(`✅ Gemini modèle validé: ${modelName}`);
+      if (await this.testSingleModel(modelName)) {
         return;
-      } catch (error) {
-        this.logger.warn(`⚠️ Modèle ${modelName} non disponible`);
       }
     }
-    this.logger.error('❌ Aucun modèle Gemini disponible! Vérifiez votre API key.');
+
+    this.logger.error('❌ Aucun modèle Gemini disponible!');
+    this.logger.error('   Causes possibles:');
+    this.logger.error('   1. ❌ Votre clé API n\'est PAS une clé Gemini');
+    this.logger.error('   2. ❌ L\'API Gemini n\'est pas activée pour cette clé');
+    this.logger.error('   3. ❌ La clé est expirée ou invalide');
+    this.logger.error('');
+    this.logger.error('   Solutions:');
+    this.logger.error('   1. Allez sur: https://aistudio.google.com/app/apikey');
+    this.logger.error('   2. Créez une NOUVELLE clé API');
+    this.logger.error('   3. Remplacez GEMINI_API_KEY dans votre .env');
+    this.logger.error('   4. Redémarrez le serveur');
+  }
+
+  /**
+   * 🧪 Teste un modèle spécifique
+   */
+  private async testSingleModel(modelName: string): Promise<boolean> {
+    try {
+      this.logger.log(`   Essai: ${modelName}...`);
+      const model = this.gemini.getGenerativeModel({ model: modelName });
+
+      // Test simple avec timeout
+      const result = await Promise.race([
+        model.generateContent('Hi'),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout')), 5000)
+        )
+      ]) as any;
+
+      const text = result.response?.text();
+
+      if (text && text.length > 0) {
+        this.workingModel = modelName;
+        this.logger.log(`✅ Gemini modèle validé: ${modelName}`);
+        return true;
+      }
+    } catch (error: any) {
+      this.logger.warn(`   ⚠️ ${modelName}: ${error.message}`);
+    }
+    return false;
   }
 
   /**
@@ -109,8 +182,14 @@ export class AiValidationService {
     try {
       this.logger.log('🤖 Début analyse IA...');
 
+      // ✅ NOUVEAU: Si aucun modèle disponible, utiliser le mode fallback
+      if (!this.workingModel) {
+        this.logger.warn('⚠️ Aucun modèle IA disponible, utilisation du mode fallback');
+        return this.createFallbackValidation(description, complaintType, imagePaths);
+      }
+
       // 1️⃣ Analyser les images
-      const imageAnalysis = this.useVisionAPI 
+      const imageAnalysis = this.useVisionAPI
         ? await this.analyzeImagesWithVision(imagePaths)
         : await this.analyzeImagesWithGemini(imagePaths);
 
@@ -151,8 +230,74 @@ export class AiValidationService {
 
     } catch (error) {
       this.logger.error('❌ Erreur analyse IA:', error);
-      throw error;
+      // En cas d'erreur, utiliser le fallback
+      return this.createFallbackValidation(description, complaintType, imagePaths);
     }
+  }
+
+  /**
+   * 🔄 Validation de secours (sans IA)
+   */
+  private createFallbackValidation(
+    description: string,
+    complaintType: string,
+    imagePaths: string[]
+  ): AIValidationResult {
+    this.logger.log('🔄 Utilisation du mode fallback (sans IA)');
+
+    // Analyse basique par mots-clés
+    const negativeWords = ['mauvais', 'froid', 'brûlé', 'cru', 'sale', 'manquant', 'abîmé', 'pourri', 'dégoûtant'];
+    const severityWords = ['très', 'extrêmement', 'complètement', 'totalement', 'horrible'];
+
+    const descLower = description.toLowerCase();
+    const hasNegative = negativeWords.some(word => descLower.includes(word));
+    const hasSeverity = severityWords.some(word => descLower.includes(word));
+    const hasImages = imagePaths.length > 0;
+
+    // Calculer les scores
+    let qualityScore = 50;
+    let matchScore = 50;
+    let confidence = 60;
+
+    if (hasNegative) {
+      qualityScore = 40;
+      matchScore += 20;
+      confidence += 10;
+    }
+
+    if (hasSeverity) {
+      qualityScore -= 10;
+      matchScore += 10;
+      confidence += 10;
+    }
+
+    if (hasImages) {
+      matchScore += 20;
+      confidence += 10;
+    }
+
+    const isValid = hasNegative || hasImages;
+    const severity = hasSeverity ? 'high' : hasNegative ? 'medium' : 'low';
+
+    return {
+      isValid,
+      confidenceScore: Math.min(confidence, 85), // Max 85% sans IA
+      imageAnalysis: {
+        detectedObjects: hasImages ? ['food', 'dish'] : [],
+        foodQualityScore: qualityScore,
+        issuesDetected: hasNegative ? ['quality_issue'] : [],
+      },
+      textAnalysis: {
+        sentiment: hasNegative ? 'negative' : 'neutral',
+        keywords: description.split(' ').slice(0, 5),
+        severity,
+      },
+      matchScore: Math.min(matchScore, 100),
+      recommendation: isValid
+        ? 'Réclamation acceptée (validation automatique sans IA). Vérification manuelle recommandée.'
+        : 'Réclamation ambiguë. Examen manuel requis.',
+      processedAt: new Date(),
+    };
   }
 
   /**
@@ -187,11 +332,11 @@ export class AiValidationService {
         const foodLabels = ['food', 'dish', 'meal', 'cuisine', 'plate'];
         const problemLabels = ['dirty', 'burnt', 'raw', 'spoiled', 'mold', 'cold'];
 
-        const hasFoodDetected = labels.some(l => 
+        const hasFoodDetected = labels.some(l =>
           l.description && foodLabels.some(fl => l.description!.toLowerCase().includes(fl))
         );
 
-        const hasIssues = labels.some(l => 
+        const hasIssues = labels.some(l =>
           l.description && problemLabels.some(pl => l.description!.toLowerCase().includes(pl))
         );
 
@@ -222,9 +367,11 @@ export class AiValidationService {
    */
   private async analyzeImagesWithGemini(imagePaths: string[]): Promise<ImageAnalysis> {
     try {
-      // ✅ Utiliser le modèle qui fonctionne (déterminé au startup)
-      const modelName = this.workingModel || 'gemini-1.5-flash-latest';
-      const model = this.gemini.getGenerativeModel({ model: modelName });
+      if (!this.workingModel) {
+        throw new Error('Aucun modèle Gemini disponible');
+      }
+
+      const model = this.gemini.getGenerativeModel({ model: this.workingModel });
 
       const allLabels: string[] = [];
       const allIssues: string[] = [];
@@ -271,7 +418,7 @@ Détecte: nourriture, plats, problèmes (brûlé, cru, froid, abîmé, sale, etc
 
           const responseText = result.response.text();
           const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-          
+
           if (jsonMatch) {
             const analysis = JSON.parse(jsonMatch[0]);
             allLabels.push(...analysis.labels);
@@ -297,7 +444,7 @@ Détecte: nourriture, plats, problèmes (brûlé, cru, froid, abîmé, sale, etc
 
     } catch (error) {
       this.logger.error('❌ Erreur Gemini Vision globale:', error);
-      
+
       // Fallback
       return {
         labels: ['food', 'unknown'],
@@ -316,9 +463,11 @@ Détecte: nourriture, plats, problèmes (brûlé, cru, froid, abîmé, sale, etc
     imageAnalysis: ImageAnalysis
   ): Promise<TextAnalysisResult> {
     try {
-      // ✅ Utiliser le modèle qui fonctionne (déterminé au startup)
-      const modelName = this.workingModel || 'gemini-1.5-flash-latest';
-      const model = this.gemini.getGenerativeModel({ model: modelName });
+      if (!this.workingModel) {
+        throw new Error('Aucun modèle Gemini disponible');
+      }
+
+      const model = this.gemini.getGenerativeModel({ model: this.workingModel });
 
       const prompt = `
 Tu es un expert en validation de réclamations pour un service de livraison de nourriture.
@@ -352,7 +501,7 @@ RÉPONDS EN JSON UNIQUEMENT (pas de markdown):
       // ✅ Parser JSON correctement
       const cleanText = responseText.replace(/```json\n?|\n?```/g, '').trim();
       const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-      
+
       if (jsonMatch) {
         return JSON.parse(jsonMatch[0]);
       }
@@ -371,7 +520,7 @@ RÉPONDS EN JSON UNIQUEMENT (pas de markdown):
    */
   private createFallbackTextAnalysis(description: string): TextAnalysisResult {
     const negativeWords = ['mauvais', 'froid', 'brûlé', 'cru', 'sale', 'manquant', 'abîmé'];
-    const hasNegativeWords = negativeWords.some(word => 
+    const hasNegativeWords = negativeWords.some(word =>
       description.toLowerCase().includes(word)
     );
 
@@ -390,7 +539,7 @@ RÉPONDS EN JSON UNIQUEMENT (pas de markdown):
   private calculateMatchScore(imageAnalysis: ImageAnalysis, textAnalysis: TextAnalysisResult): number {
     let score = 50;
 
-    const hasFoodInImage = imageAnalysis.labels.some(l => 
+    const hasFoodInImage = imageAnalysis.labels.some(l =>
       ['food', 'dish', 'meal', 'cuisine', 'plat', 'nourriture'].some(f => l.includes(f))
     );
     if (hasFoodInImage) score += 20;
@@ -399,7 +548,7 @@ RÉPONDS EN JSON UNIQUEMENT (pas de markdown):
       score += 20;
     }
 
-    const keywordsInLabels = textAnalysis.keywords.filter(kw => 
+    const keywordsInLabels = textAnalysis.keywords.filter(kw =>
       imageAnalysis.labels.some(l => l.includes(kw.toLowerCase()))
     );
     score += Math.min(keywordsInLabels.length * 5, 20);

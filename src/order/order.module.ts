@@ -10,9 +10,10 @@ import { CartitemModule } from 'src/cartitem/cartitem.module';
     MongooseModule.forFeature([
       { name: Order.name, schema: OrderSchema },
     ]),
-    CartitemModule, 
+    CartitemModule,
   ],
   controllers: [OrderController],
   providers: [OrderService],
+  exports: [OrderService], // ✅ Export OrderService pour ReclamationModule
 })
-export class OrderModule {}
+export class OrderModule { }
