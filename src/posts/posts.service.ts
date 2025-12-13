@@ -111,21 +111,61 @@ export class PostsService {
 
 
 
-  async findAll(): Promise<PostDocument[]> {
-        // Fetch posts first
-        const posts = await this.postModel.find()
-            .sort({ createdAt: -1 })
-            .exec();
+  async findAll(userId?: Types.ObjectId): Promise<PostDocument[]> {
+    let posts: PostDocument[] = [];
 
-        // Then populate each post individually using its own ownerModel
-        await Promise.all(posts.map(post => post.populate({
-            path: 'ownerId',
-            model: post.ownerModel, // <-- RE-INTRODUCED: Explicitly use the document's own ownerModel field
-            select: '_id username fullName profilePictureUrl followerCount followingCount email professionalData.fullName professionalData.licenseNumber professionalData.profilePictureUrl'
-        })));
-        
-        return posts as PostDocument[];
+    // If userId is provided, check for personalized feed
+    if (userId) {
+      const user = await this.userModel.findById(userId).exec();
+      
+      if (user && user.preferredFoodTypes && user.preferredFoodTypes.length > 0) {
+        // Personalized feed: 70% preferred, 30% general
+        const totalLimit = 50; // Total posts to return
+        const preferredLimit = Math.ceil(totalLimit * 0.7);
+        const generalLimit = Math.floor(totalLimit * 0.3);
+
+        // Fetch preferred posts (70%)
+        const preferredPosts = await this.postModel.find({
+          foodType: { $in: user.preferredFoodTypes }
+        })
+          .sort({ createdAt: -1 })
+          .limit(preferredLimit)
+          .exec();
+
+        // Fetch general posts (30%) - posts NOT in preferredFoodTypes
+        const generalPosts = await this.postModel.find({
+          foodType: { $nin: user.preferredFoodTypes }
+        })
+          .sort({ createdAt: -1 })
+          .limit(generalLimit)
+          .exec();
+
+        // Merge: preferred first, then general
+        posts = [...preferredPosts, ...generalPosts];
+      } else {
+        // User has no preferences, return general feed
+        posts = await this.postModel.find()
+          .sort({ createdAt: -1 })
+          .limit(50)
+          .exec();
+      }
+    } else {
+      // No userId provided, return general feed
+      posts = await this.postModel.find()
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .exec();
     }
+
+    // Populate owner information for all posts
+    await Promise.all(posts.map(post => post.populate({
+      path: 'ownerId',
+      model: post.ownerModel,
+      select: '_id username fullName profilePictureUrl followerCount followingCount email professionalData.fullName professionalData.licenseNumber professionalData.profilePictureUrl'
+    })));
+
+    return posts as PostDocument[];
+  }
 
 async findOne(id: string): Promise<PostDocument>  {
     // 1. Fetch the post and populate its owner
@@ -190,6 +230,40 @@ async findOne(id: string): Promise<PostDocument>  {
   async getAllFoodTypes(): Promise<string[]> {
     // Return all FoodType enum values as an array
     return Object.values(FoodType);
+  }
+
+  async preferFoodType(postId: Types.ObjectId, userId: Types.ObjectId): Promise<UserDocument> {
+    // 1. Find the post by postId
+    const post = await this.postModel.findById(postId).exec();
+    if (!post) {
+      throw new NotFoundException(`Post with ID "${postId}" not found.`);
+    }
+
+    // 2. Extract the foodType from the found post
+    const foodType = post.foodType;
+    if (!foodType) {
+      throw new BadRequestException('Post does not have a food type.');
+    }
+
+    // 3. Find the UserAccount by userId
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new NotFoundException(`User with ID "${userId}" not found.`);
+    }
+
+    // 4. Check if the post's foodType is already in the user's preferredFoodTypes array
+    if (!user.preferredFoodTypes) {
+      user.preferredFoodTypes = [];
+    }
+
+    // 5. If not present, add the foodType to the user's preferredFoodTypes array
+    if (!user.preferredFoodTypes.includes(foodType as FoodType)) {
+      user.preferredFoodTypes.push(foodType as FoodType);
+      await user.save();
+    }
+
+    // 6. Return the updated UserAccount
+    return user;
   }
 
 
