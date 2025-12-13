@@ -9,6 +9,7 @@ import {
   Req,
   UnauthorizedException,
   Logger,
+  Delete,
 } from '@nestjs/common';
 import { ChatManagementService } from './chat-management.service';
 import { SpamDetectionService } from './spam-detection.service';
@@ -26,7 +27,7 @@ export class ChatManagementController {
     private readonly chatService: ChatManagementService,
     private readonly spamDetectionService: SpamDetectionService,
     private readonly badWordsDetectionService: BadWordsDetectionService,
-  ) {}
+  ) { }
 
   private getUserId(request: any): string {
     const userId = request.user?.userId || request.user?.sub || request.user?.id;
@@ -204,11 +205,11 @@ export class ChatManagementController {
       conversationId: 'test-batch',
       senderId: 'test-user',
     }));
-    
+
     const results = await this.spamDetectionService.analyzeMessagesBatch(
       messagesWithIds,
     );
-    
+
     return {
       total: body.messages.length,
       results: results.map((result, index) => ({
@@ -242,4 +243,19 @@ export class ChatManagementController {
   async testSpamConnection() {
     const result = await this.spamDetectionService.checkConnection();
     return result;
-  }}
+  }
+
+  // 🔹 Supprimer une conversation spécifique
+  @Delete('conversations/:id')
+  async deleteConversation(@Param('id') id: string, @Req() req: any) {
+    const userId = this.getUserId(req);
+    return this.chatService.deleteConversation(id, userId);
+  }
+
+  // 🔹 Supprimer toutes les conversations de l'utilisateur (Reset)
+  @Delete('conversations')
+  async deleteAllConversations(@Req() req: any) {
+    const userId = this.getUserId(req);
+    return this.chatService.deleteAllConversations(userId);
+  }
+}

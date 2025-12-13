@@ -64,17 +64,22 @@ export class ChatManagementService {
         : [],
     ]);
 
-    const participantNames = new Map<string, { name: string; avatarUrl: string }>();
+    const participantNames = new Map<
+      string,
+      { name: string; avatarUrl: string; email?: string }
+    >();
     users.forEach((user: any) => {
       participantNames.set(user._id.toString(), {
         name: user.username || user.email || 'User',
         avatarUrl: user.profilePictureUrl || '',
+        email: user.email,
       });
     });
     professionals.forEach((prof: any) => {
       participantNames.set(prof._id.toString(), {
         name: prof.professionalData?.fullName || prof.email || 'Professional',
         avatarUrl: prof.professionalData?.avatarUrl || '',
+        email: prof.email,
       });
     });
 
@@ -92,16 +97,14 @@ export class ChatManagementService {
 
         const otherParticipant = otherIds.length > 0 ? participantNames.get(otherIds[0]) : null;
 
-        const displayName =
-          (conv.title || '').trim() ||
-          otherParticipant?.name ||
-          'Conversation';
+        const displayName = (conv.kind === 'private' ? '' : (conv.title || '').trim()) || otherParticipant?.name || 'Conversation';
 
         const displayAvatar = otherParticipant?.avatarUrl || '';
 
         return {
           id: conv._id.toString(),
           name: displayName,
+          participantEmail: otherParticipant?.email,
           avatarUrl: displayAvatar,
           message: lastMessage?.content || 'No message yet',
           time:
@@ -114,17 +117,34 @@ export class ChatManagementService {
       }),
     );
 
-    return chats;
+    // Disambiguate duplicate names by appending email when needed
+    const nameCounts = chats.reduce((map, chat) => {
+      const key = (chat.name || '').trim().toLowerCase();
+      if (!key) return map;
+      map.set(key, (map.get(key) || 0) + 1);
+      return map;
+    }, new Map<string, number>());
+
+    return chats.map((chat) => {
+      const base = (chat.name || '').trim();
+      if (!base) return chat;
+      const key = base.toLowerCase();
+      if ((nameCounts.get(key) || 0) > 1 && chat.participantEmail) {
+        return { ...chat, name: `${base} (${chat.participantEmail})` };
+      }
+      return chat;
+    });
   }
 
   async createConversation(dto: CreateConversationDto, creatorId: string) {
+    const kind = dto.kind || 'private';
     const participants = this.normalizeParticipants(dto.participants, creatorId);
 
-    if (dto.kind === 'private' && participants.length !== 2) {
+    if (kind === 'private' && participants.length !== 2) {
       throw new BadRequestException('A private conversation must have exactly two participants');
     }
 
-    if (dto.kind === 'private') {
+    if (kind === 'private') {
       const existing = await this.convModel
         .findOne({
           kind: 'private',
@@ -139,9 +159,9 @@ export class ChatManagementService {
     }
 
     const conv = new this.convModel({
-      kind: dto.kind,
+      kind,
       participants,
-      title: dto.title?.trim() || '',
+      title: (kind === 'private' ? '' : dto.title?.trim()) || '',
       meta: dto.meta || {},
     });
 
@@ -242,10 +262,10 @@ export class ChatManagementService {
         .exec(),
     ]);
 
-    return [
+    const peers = [
       ...users.map((user) => ({
         id: user._id,
-        name: user.username,
+        name: user.username?.trim() || user.email,
         email: user.email,
         role: user.role || 'user',
         kind: 'user',
@@ -253,13 +273,76 @@ export class ChatManagementService {
       })),
       ...professionals.map((prof) => ({
         id: prof._id,
-        name: prof.professionalData?.fullName || prof.email,
+        name: (prof.professionalData?.fullName || prof.email || '').trim() || prof.email,
         email: prof.email,
         role: prof.role || 'professional',
         kind: 'professional',
         avatarUrl: prof.professionalData?.avatarUrl || '',
       })),
     ];
+
+    // Ensure names are unique for display; if duplicates exist, append email to disambiguate
+    const nameCounts = peers.reduce((map, peer) => {
+      const key = (peer.name || '').trim().toLowerCase();
+      if (!key) return map;
+      map.set(key, (map.get(key) || 0) + 1);
+      return map;
+    }, new Map<string, number>());
+
+    return peers.map((peer) => {
+      const baseName = (peer.name || '').trim();
+      if (!baseName) {
+        return { ...peer, name: peer.email || peer.id?.toString?.() || 'User' };
+      }
+
+      const key = baseName.toLowerCase();
+      if ((nameCounts.get(key) || 0) > 1) {
+        const detail = peer.email || peer.id?.toString?.() || '';
+        return {
+          ...peer,
+          name: detail ? `${baseName} (${detail})` : baseName,
+        };
+      }
+
+      return { ...peer, name: baseName };
+    });
+  }
+
+  async deleteConversation(conversationId: string, userId: string) {
+    const conversation = await this.convModel.findById(conversationId).exec();
+    if (!conversation) {
+      throw new NotFoundException('Conversation not found');
+    }
+
+    const userObjectId = this.ensureObjectId(userId);
+    this.assertParticipant(conversation, userObjectId);
+
+    await this.msgModel.deleteMany({ conversation: conversation._id }).exec();
+    await this.convModel.findByIdAndDelete(conversationId).exec();
+
+    return { success: true, message: 'Conversation and messages deleted' };
+  }
+
+  async deleteAllConversations(userId: string) {
+    const userObjectId = this.ensureObjectId(userId);
+    const conversations = await this.convModel.find({ participants: userObjectId }).exec();
+
+    if (!conversations.length) {
+      return { success: true, message: 'No conversations found to delete' };
+    }
+
+    const conversationIds = conversations.map(c => c._id);
+
+    // Delete all messages in these conversations
+    await this.msgModel.deleteMany({ conversation: { $in: conversationIds } }).exec();
+
+    // Delete the conversations themselves
+    await this.convModel.deleteMany({ _id: { $in: conversationIds } }).exec();
+
+    return {
+      success: true,
+      message: `Deleted ${conversations.length} conversations and their messages`
+    };
   }
 
   private normalizeParticipants(participants: string[], creatorId: string) {

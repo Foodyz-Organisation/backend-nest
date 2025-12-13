@@ -38,7 +38,9 @@ export class ChatManagementGateway
     try {
       const userId = this.extractUserId(client);
       client.data.userId = userId;
-      this.logger.debug(`Client ${client.id} connected as ${userId}`);
+      // Join a room named after the user ID to allow targeted messages (e.g. incoming calls)
+      client.join(userId);
+      this.logger.debug(`Client ${client.id} connected as ${userId} and joined room ${userId}`);
     } catch (error) {
       this.logger.warn(`Unauthorized socket connection: ${error.message}`);
       client.emit('error', 'Unauthorized');
@@ -143,13 +145,51 @@ export class ChatManagementGateway
   // 📞 WebRTC Signaling Events
 
   @SubscribeMessage('call_user')
-  handleCallUser(client: Socket, payload: { conversationId: string; offer: any }) {
-    this.logger.debug(`Call initiated in conversation ${payload.conversationId} by ${client.id}`);
-    client.to(payload.conversationId).emit('call_made', {
-      offer: payload.offer,
-      socket: client.id,
-      userId: client.data.userId,
-    });
+  async handleCallUser(client: Socket, payload: { conversationId: string; offer: any }) {
+    const room = payload?.conversationId;
+    if (!room) {
+      this.logger.warn(`call_user without conversationId from ${client.id}`);
+      return;
+    }
+
+    try {
+      const userId = client.data.userId || this.extractUserId(client);
+      // Retrieve conversation to get participants
+      const conversation = await this.chatService.getConversationForUser(room, userId);
+
+      client.join(room);
+      this.logger.debug(`Call initiated in conversation ${room} by ${client.id}`);
+
+      // Emit call_made to conversation room (for backward compatibility or active chats)
+      client.to(room).emit('call_made', {
+        offer: payload.offer,
+        socket: client.id,
+        userId,
+        conversationId: room,
+      });
+
+      // ALSO emit to specific participants' user rooms to ensure they ring even if not in the conversation view
+      if (conversation.participants) {
+        conversation.participants.forEach((participant: any) => {
+          let participantId = participant.toString();
+          if (participant._id) participantId = participant._id.toString();
+
+          if (participantId !== userId) {
+            this.server.to(participantId).emit('call_made', {
+              offer: payload.offer,
+              socket: client.id,
+              userId,
+              conversationId: room,
+            });
+            this.logger.debug(`Signaling call to user ${participantId}`);
+          }
+        });
+      }
+
+    } catch (err: any) {
+      this.logger.warn(`call_user rejected for ${client.id}: ${err?.message || err}`);
+      client.emit('error', err?.message || 'Call not permitted');
+    }
   }
 
   @SubscribeMessage('make_answer')
@@ -174,17 +214,43 @@ export class ChatManagementGateway
 
   @SubscribeMessage('end_call')
   handleEndCall(client: Socket, payload: { conversationId: string }) {
-    this.logger.debug(`Call ended in conversation ${payload.conversationId}`);
-    client.to(payload.conversationId).emit('call_ended', {
+    const room = payload?.conversationId;
+    if (!room) {
+      this.logger.warn(`end_call received without conversationId from ${client.id}`);
+      return;
+    }
+
+    this.logger.debug(`Call ended in conversation ${room} by ${client.id}`);
+
+    // Notify everyone in the room, including the sender, so both sides stop cleanly
+    this.server.to(room).emit('call_ended', {
       userId: client.data.userId,
+      socket: client.id,
     });
+
+    // Also try to notify participants directly if they are not in the room
+    // (Optimization: can implement similar loop as call_user if needed, but end_call is usually less critical if room broadcast works)
+
+    // Ensure the sender leaves the room to avoid lingering signal traffic
+    client.leave(room);
   }
 
   @SubscribeMessage('decline_call')
   handleDeclineCall(client: Socket, payload: { conversationId: string }) {
-    this.logger.debug(`Call declined in conversation ${payload.conversationId} by ${client.id}`);
-    client.to(payload.conversationId).emit('call_declined', {
+    const room = payload?.conversationId;
+    if (!room) {
+      this.logger.warn(`decline_call received without conversationId from ${client.id}`);
+      return;
+    }
+
+    this.logger.debug(`Call declined in conversation ${room} by ${client.id}`);
+
+    this.server.to(room).emit('call_declined', {
       userId: client.data.userId,
+      socket: client.id,
     });
+
+    // Leave the room on decline as well
+    client.leave(room);
   }
 }
