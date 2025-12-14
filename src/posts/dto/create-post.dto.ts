@@ -5,10 +5,13 @@ import {
   ArrayMinSize,
   IsUrl,
   IsEnum,
+  IsOptional,
+  IsNumber,
+  Min,
   // Removed IsOptional as caption is now required
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { MediaType } from '../schemas/post.schema'; // Import MediaType enum
+import { MediaType, FoodType } from '../schemas/post.schema'; // Import MediaType and FoodType enums
 
 export class CreatePostDto {
   @ApiProperty({
@@ -40,4 +43,36 @@ export class CreatePostDto {
   })
   @IsEnum(MediaType, { message: 'Media type must be one of: image, reel, carousel.' })
   mediaType: MediaType;
+
+  @ApiProperty({
+    description: 'The type of food in the post. Must be one of the predefined food types.',
+    enum: FoodType,
+    example: FoodType.SPICY,
+  })
+  @IsEnum(FoodType, { 
+    message: 'Food type must be one of: Spicy, Healthy, Mashwi, Couscous, Street food, Fast food, Seafood, Fried, Desserts, Vegetarian-Friendly, Meat.' 
+  })
+  foodType: FoodType;
+
+  @ApiProperty({
+    description: 'The price of the food item in TND. Optional field. Will be displayed as "30TND" or "6.9TND" on the frontend.',
+    type: Number,
+    required: false,
+    example: 30,
+  })
+  @IsOptional()
+  @IsNumber({}, { message: 'Price must be a number.' })
+  @Min(0, { message: 'Price must be a positive number.' })
+  price?: number;
+
+  @ApiProperty({
+    description: 'The preparation time in minutes. Optional field. Will be displayed as "15 minutes" on the frontend.',
+    type: Number,
+    required: false,
+    example: 15,
+  })
+  @IsOptional()
+  @IsNumber({}, { message: 'Preparation time must be a number.' })
+  @Min(0, { message: 'Preparation time must be a positive number.' })
+  preparationTime?: number;
 }

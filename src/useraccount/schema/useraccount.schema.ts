@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
+import { FoodType } from '../../posts/schemas/post.schema';
 
 export type UserDocument = UserAccount & Document;
 
@@ -80,6 +81,9 @@ export class UserAccount {
     reclamationId: string;
     date: Date;
   }>;
+
+  @Prop({ type: [String], enum: FoodType, default: [] })
+  preferredFoodTypes: FoodType[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(UserAccount);

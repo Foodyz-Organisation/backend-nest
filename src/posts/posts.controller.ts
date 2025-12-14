@@ -29,7 +29,7 @@ import {
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
-import { PostDocument, Post as PostSchema } from './schemas/post.schema';
+import { PostDocument, Post as PostSchema, FoodType } from './schemas/post.schema';
 // import { MulterFile } from '../common/types/multer-file.type'; // Removed as Express.Multer.File is used directly
 import { UploadResponseDto } from './dto/upload-response.dto';
 import { CreateCommentDto } from './dto/create-comment.dto'; // Ensure this is imported if used
@@ -186,6 +186,68 @@ export class PostsController {
     return this.postsService.findByOwnerId(new Types.ObjectId(ownerId));
   }
 
+  // --- Get All Food Types --- (More specific path segment than :id)
+  @Get('food-types')
+  @ApiOperation({ 
+    summary: 'Get all available food types',
+    description: 'Returns an array of all available food types that can be used for filtering posts or creating new posts.'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Array of food type strings',
+    schema: {
+      type: 'array',
+      items: { type: 'string' },
+      example: ['Spicy', 'Healthy', 'Mashwi', 'Couscous', 'Street food', 'Fast food', 'Seafood', 'Fried', 'Desserts', 'Vegetarian-Friendly', 'Meat']
+    }
+  })
+  async getAllFoodTypes(): Promise<string[]> {
+    return this.postsService.getAllFoodTypes();
+  }
+
+  // --- Get Posts by Food Type --- (More specific path segment than :id)
+  @Get('by-food-type/:foodType')
+  @ApiOperation({ 
+    summary: 'Retrieve all posts filtered by food type',
+    description: 'Returns all posts that match the specified food type. Valid food types: Spicy, Healthy, Mashwi, Couscous, Street food, Fast food, Seafood, Fried, Desserts, Vegetarian-Friendly, Meat'
+  })
+  @ApiResponse({ status: 200, description: 'List of posts filtered by food type', type: [PostSchema] })
+  @ApiResponse({ status: 400, description: 'Invalid food type' })
+  async findByFoodType(@Param('foodType') foodType: string) {
+    return this.postsService.findByFoodType(foodType);
+  }
+
+  // --- Prefer Food Type (for normal users) --- (More specific path segment than :id)
+  @Post(':postId/prefer-foodtype')
+  @ApiOperation({ 
+    summary: 'Add a post\'s food type to user preferences',
+    description: 'When a normal user interacts with a post, this endpoint adds the post\'s food type to their preferredFoodTypes array for personalized feed recommendations.'
+  })
+  @ApiResponse({ status: 200, description: 'Food type added to user preferences successfully' })
+  @ApiResponse({ status: 400, description: 'Bad request (invalid IDs or post has no food type)' })
+  @ApiResponse({ status: 404, description: 'Post or user not found' })
+  @ApiHeader({
+    name: 'x-user-id',
+    description: 'The ID of the normal user (UserAccount) adding the food type preference',
+    required: true,
+  })
+  async preferFoodType(
+    @Param('postId') postId: string,
+    @Headers('x-user-id') userId: string,
+  ) {
+    if (!userId) {
+      throw new BadRequestException('x-user-id header is required.');
+    }
+    if (!Types.ObjectId.isValid(postId)) {
+      throw new BadRequestException('Invalid post ID format.');
+    }
+    if (!Types.ObjectId.isValid(userId)) {
+      throw new BadRequestException('Invalid user ID format.');
+    }
+    return this.postsService.preferFoodType(new Types.ObjectId(postId), new Types.ObjectId(userId));
+  }
+
+  // --- Get Saved Posts (for normal users only) --- (More specific path segment than :id)
   @Get('saved')
   @ApiOperation({ summary: 'Get all saved posts for a normal user' })
   @ApiResponse({ status: 200, description: 'List of saved posts with full details including comments', type: [PostSchema] })
@@ -207,9 +269,20 @@ export class PostsController {
 
   // --- Get All Posts --- (General GET for the root path)
   @Get()
-  @ApiOperation({ summary: 'Retrieve all posts' })
-  @ApiResponse({ status: 200, description: 'List of all posts', type: [PostSchema] })
-  async findAll() {
+  @ApiOperation({ 
+    summary: 'Retrieve all posts',
+    description: 'Returns personalized feed (70% preferred, 30% general) if user is authenticated and has food preferences. Otherwise returns general feed.'
+  })
+  @ApiResponse({ status: 200, description: 'List of posts (personalized or general)', type: [PostSchema] })
+  @ApiHeader({
+    name: 'x-user-id',
+    description: 'Optional: The ID of the normal user (UserAccount) for personalized feed',
+    required: false,
+  })
+  async findAll(@Headers('x-user-id') userId?: string) {
+    if (userId && Types.ObjectId.isValid(userId)) {
+      return this.postsService.findAll(new Types.ObjectId(userId));
+    }
     return this.postsService.findAll();
   }
 
@@ -480,5 +553,5 @@ export class PostsController {
     return this.postsService.getComments(new Types.ObjectId(postId)); // <-- Pass ObjectId
   }
 
-
+  
 }

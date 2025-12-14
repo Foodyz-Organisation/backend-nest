@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Post, PostDocument, MediaType } from './schemas/post.schema';
+import { Post, PostDocument, MediaType, FoodType } from './schemas/post.schema';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UploadResponseDto } from './dto/upload-response.dto'; 
 import { UpdatePostDto } from './dto/update-post.dto';
@@ -111,44 +111,69 @@ export class PostsService {
     return populatedPost as PostDocument; // Assert type here
   }
 
-
-
-    /**
-   * Handles the upload of one or more files and constructs their URLs.
-   * Note: For simplicity, this directly uses the filename provided by Multer.
-   * In a production setup, you'd likely involve a cloud storage service here.
-   * @param files An array of Multer file objects.
-   * @returns An UploadResponseDto containing the URLs of the uploaded files.
-   */
   async uploadFiles(files: MulterFile[]): Promise<UploadResponseDto> {
-    // Construct the URLs based on where the files are saved and your server's access path.
-    // The '/uploads/' prefix should match the static assets path you configure in app.module.ts
-    //const urls = files.map(file => `http://localhost:3000/uploads/${file.filename}`);
-         // --- CRITICAL CHANGE: Use 10.0.2.2 for emulator access ---
     const baseUrl = 'http://10.0.2.2:3000'; // Or your host machine's IP for physical device
     const urls = files.map(file => `${baseUrl}/uploads/${file.filename}`);
-    // --- END CRITICAL CHANGE ---
-    // Return the URLs in the defined DTO structure
     return { urls };
   }
 
 
 
-  async findAll(): Promise<PostDocument[]> {
-        // Fetch posts first
-        const posts = await this.postModel.find()
-            .sort({ createdAt: -1 })
-            .exec();
+  async findAll(userId?: Types.ObjectId): Promise<PostDocument[]> {
+    let posts: PostDocument[] = [];
 
-        // Then populate each post individually using its own ownerModel
-        await Promise.all(posts.map(post => post.populate({
-            path: 'ownerId',
-            model: post.ownerModel, // <-- RE-INTRODUCED: Explicitly use the document's own ownerModel field
-            select: '_id username fullName profilePictureUrl followerCount followingCount email professionalData.fullName professionalData.licenseNumber professionalData.profilePictureUrl'
-        })));
-        
-        return posts as PostDocument[];
+    // If userId is provided, check for personalized feed
+    if (userId) {
+      const user = await this.userModel.findById(userId).exec();
+      
+      if (user && user.preferredFoodTypes && user.preferredFoodTypes.length > 0) {
+        // Personalized feed: 70% preferred, 30% general
+        const totalLimit = 50; // Total posts to return
+        const preferredLimit = Math.ceil(totalLimit * 0.7);
+        const generalLimit = Math.floor(totalLimit * 0.3);
+
+        // Fetch preferred posts (70%)
+        const preferredPosts = await this.postModel.find({
+          foodType: { $in: user.preferredFoodTypes }
+        })
+          .sort({ createdAt: -1 })
+          .limit(preferredLimit)
+          .exec();
+
+        // Fetch general posts (30%) - posts NOT in preferredFoodTypes
+        const generalPosts = await this.postModel.find({
+          foodType: { $nin: user.preferredFoodTypes }
+        })
+          .sort({ createdAt: -1 })
+          .limit(generalLimit)
+          .exec();
+
+        // Merge: preferred first, then general
+        posts = [...preferredPosts, ...generalPosts];
+      } else {
+        // User has no preferences, return general feed
+        posts = await this.postModel.find()
+          .sort({ createdAt: -1 })
+          .limit(50)
+          .exec();
+      }
+    } else {
+      // No userId provided, return general feed
+      posts = await this.postModel.find()
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .exec();
     }
+
+    // Populate owner information for all posts
+    await Promise.all(posts.map(post => post.populate({
+      path: 'ownerId',
+      model: post.ownerModel,
+      select: '_id username fullName profilePictureUrl followerCount followingCount email professionalData.fullName professionalData.licenseNumber professionalData.profilePictureUrl'
+    })));
+
+    return posts as PostDocument[];
+  }
 
 async findOne(id: string): Promise<PostDocument>  {
     // 1. Fetch the post and populate its owner
@@ -187,6 +212,66 @@ async findOne(id: string): Promise<PostDocument>  {
     })));
 
     return posts as PostDocument[];
+  }
+
+  async findByFoodType(foodType: string): Promise<PostDocument[]> {
+    // Validate that the foodType is a valid enum value
+    if (!Object.values(FoodType).includes(foodType as FoodType)) {
+      throw new BadRequestException(
+        `Invalid food type. Must be one of: ${Object.values(FoodType).join(', ')}`
+      );
+    }
+
+    const posts = await this.postModel.find({ foodType: foodType })
+      .sort({ createdAt: -1 })
+      .exec();
+
+    await Promise.all(posts.map(post => post.populate({
+        path: 'ownerId',
+        model: post.ownerModel,
+        select: '_id username fullName profilePictureUrl followerCount followingCount email professionalData.fullName professionalData.licenseNumber professionalData.profilePictureUrl'
+    })));
+
+    return posts as PostDocument[];
+  }
+
+  async getAllFoodTypes(): Promise<string[]> {
+    // Return all FoodType enum values as an array
+    return Object.values(FoodType);
+  }
+
+  async preferFoodType(postId: Types.ObjectId, userId: Types.ObjectId): Promise<UserDocument> {
+    // 1. Find the post by postId
+    const post = await this.postModel.findById(postId).exec();
+    if (!post) {
+      throw new NotFoundException(`Post with ID "${postId}" not found.`);
+    }
+
+    // 2. Extract the foodType from the found post
+    const foodType = post.foodType;
+    if (!foodType) {
+      throw new BadRequestException('Post does not have a food type.');
+    }
+
+    // 3. Find the UserAccount by userId
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new NotFoundException(`User with ID "${userId}" not found.`);
+    }
+
+    // 4. Check if the post's foodType is already in the user's preferredFoodTypes array
+    if (!user.preferredFoodTypes) {
+      user.preferredFoodTypes = [];
+    }
+
+    // 5. If not present, add the foodType to the user's preferredFoodTypes array
+    if (!user.preferredFoodTypes.includes(foodType as FoodType)) {
+      user.preferredFoodTypes.push(foodType as FoodType);
+      await user.save();
+    }
+
+    // 6. Return the updated UserAccount
+    return user;
   }
 
 
@@ -491,10 +576,39 @@ async getReelsFeed(
       });
       return updatedPost as PostDocument;
      }
-    // --- END BOOKMARKS METHODS ---
 
-  // ---  Methods for Comments ---
-  // These return CommentDocument or void, so no populate needed on PostDocument return.
+    async getSavedPosts(userId: Types.ObjectId): Promise<PostDocument[]> {
+      // Step 1: Find all saves for the user
+      const saves = await this.saveModel.find({ userId }).exec();
+      
+      if (saves.length === 0) {
+        return [];
+      }
+
+      // Step 2: Extract post IDs from saves
+      const postIds = saves.map(save => save.postId);
+
+      // Step 3: Fetch all posts by their IDs
+      const posts = await this.postModel.find({ _id: { $in: postIds } })
+        .sort({ createdAt: -1 }) // Sort by newest first
+        .exec();
+
+      // Step 4: Populate ownerId for each post based on its ownerModel
+      await Promise.all(posts.map(post => post.populate({
+        path: 'ownerId',
+        model: post.ownerModel, // Use the post's own ownerModel field
+        select: '_id username fullName profilePictureUrl followerCount followingCount email professionalData.fullName professionalData.licenseNumber professionalData.profilePictureUrl'
+      })));
+
+      // Step 5: Fetch and attach comments for each post
+      await Promise.all(posts.map(async (post) => {
+        const comments = await this.getComments(post._id as Types.ObjectId);
+        post.comments = comments;
+      }));
+
+      return posts as PostDocument[];
+    }
+
 async createComment(
     postId: Types.ObjectId, // Now expects ObjectId from controller
     userId: Types.ObjectId, // <-- NEW: The ID of the user commenting
@@ -625,36 +739,5 @@ async createComment(
     return trendingPosts as PostDocument[]; // Assert type here
   }
   
-  async getSavedPosts(userId: Types.ObjectId): Promise<PostDocument[]> {
-      // Step 1: Find all saves for the user
-      const saves = await this.saveModel.find({ userId }).exec();
-      
-      if (saves.length === 0) {
-        return [];
-      }
-
-      // Step 2: Extract post IDs from saves
-      const postIds = saves.map(save => save.postId);
-
-      // Step 3: Fetch all posts by their IDs
-      const posts = await this.postModel.find({ _id: { $in: postIds } })
-        .sort({ createdAt: -1 }) // Sort by newest first
-        .exec();
-
-      // Step 4: Populate ownerId for each post based on its ownerModel
-      await Promise.all(posts.map(post => post.populate({
-        path: 'ownerId',
-        model: post.ownerModel, // Use the post's own ownerModel field
-        select: '_id username fullName profilePictureUrl followerCount followingCount email professionalData.fullName professionalData.licenseNumber professionalData.profilePictureUrl'
-      })));
-
-      // Step 5: Fetch and attach comments for each post
-      await Promise.all(posts.map(async (post) => {
-        const comments = await this.getComments(post._id as Types.ObjectId);
-        post.comments = comments;
-      }));
-
-      return posts as PostDocument[];
-    }
-
+  
 }
