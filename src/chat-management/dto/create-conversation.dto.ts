@@ -1,12 +1,13 @@
 import { IsArray, IsOptional, IsString, ArrayMinSize, IsIn } from 'class-validator';
 
 export class CreateConversationDto {
+  @IsOptional()
   @IsString()
   @IsIn(['private', 'group'])
-  kind: 'private' | 'group';
+  kind?: 'private' | 'group';
 
   @IsArray()
-  @ArrayMinSize(2)
+  @ArrayMinSize(1)
   participants: string[];
 
   @IsOptional()
