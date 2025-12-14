@@ -61,6 +61,7 @@ export class AuthService {
       password: hashed,
       role: 'professional',
       isActive: true,
+      locations: profData.locations || [], // Ensure locations array is set
     });
     await newProf.save();
     console.log('✅ Professional registered:', normalizedEmail);

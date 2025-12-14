@@ -40,7 +40,8 @@ const created = new this.profModel({
   isActive: true,
   linkedUserId: createDto.linkedUserId
     ? new Types.ObjectId(createDto.linkedUserId)
-    : undefined
+    : undefined,
+  locations: createDto.locations || [], // Ensure locations array is set
 });
 
     return created.save();
@@ -99,8 +100,31 @@ async update(
   if (updateDto.licenseNumber !== undefined)
     prof.licenseNumber = updateDto.licenseNumber;
 
+  if (updateDto.description !== undefined)
+    prof.description = updateDto.description;
+
+  if (updateDto.address !== undefined)
+    prof.address = updateDto.address;
+
+  if (updateDto.phone !== undefined)
+    prof.phone = updateDto.phone;
+
+  if (updateDto.hours !== undefined)
+    prof.hours = updateDto.hours;
+
+  if (updateDto.services !== undefined)
+    prof.services = { ...prof.services, ...updateDto.services };
+
+  if (updateDto.imageUrl !== undefined)
+    prof.imageUrl = updateDto.imageUrl;
+
   // ✅ Use static string paths for documents
-  prof.documents = ['/uploads/license.pdf']; // static for now
+  if (updateDto.documents !== undefined)
+    prof.documents = updateDto.documents;
+
+  // Update locations if provided
+  if (updateDto.locations !== undefined)
+    prof.locations = updateDto.locations;
 
   return prof.save();
 }

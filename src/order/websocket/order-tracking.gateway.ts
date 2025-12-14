@@ -6,6 +6,12 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { Order, OrderDocument } from '../schema/order.schema';
+import { ProfessionalAccount, ProfessionalDocument } from '../../professionalaccount/schema/professionalaccount.schema';
+import { calculateDistance } from '../utils/distance.util';
+import { NotFoundException, Logger } from '@nestjs/common';
 
 @WebSocketGateway({
   namespace: 'order-tracking', 
@@ -17,23 +23,78 @@ export class OrderTrackingGateway {
   @WebSocketServer()
   server: Server;
 
+  private readonly logger = new Logger(OrderTrackingGateway.name);
   private activeSharing: Map<string, boolean> = new Map();
+  private restaurantLocations: Map<string, { lat: number; lon: number; name?: string }> = new Map();
+
+  constructor(
+    @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
+    @InjectModel(ProfessionalAccount.name) private professionalModel: Model<ProfessionalDocument>,
+  ) {}
 
   @SubscribeMessage('join-order')
-  handleJoinOrder(
+  async handleJoinOrder(
     @MessageBody() data: { orderId: string; userType: 'user' | 'pro' },
     @ConnectedSocket() client: Socket,
   ) {
     const { orderId, userType } = data;
 
-    client.join(orderId);
+    try {
+      // Fetch order to get professionalId
+      const order = await this.orderModel.findById(orderId).lean();
+      if (!order) {
+        client.emit('error', { message: 'Order not found' });
+        return;
+      }
 
-    console.log(`Client ${client.id} (${userType}) joined order ${orderId}`);
+      // Fetch professional to get restaurant location
+      const professional = await this.professionalModel
+        .findById(order.professionalId)
+        .lean();
 
-    this.server.to(orderId).emit('user-joined', {
-      userType,
-      clientId: client.id,
-    });
+      if (!professional) {
+        client.emit('error', { message: 'Professional not found' });
+        return;
+      }
+
+      // Get first location from professional (or use first available)
+      const restaurantLocation = professional.locations?.[0];
+      
+      if (restaurantLocation) {
+        // Store restaurant location for this order
+        this.restaurantLocations.set(orderId, {
+          lat: restaurantLocation.lat,
+          lon: restaurantLocation.lon,
+          name: restaurantLocation.name,
+        });
+
+        // Send restaurant location to the client who just joined
+        client.emit('restaurant-location', {
+          lat: restaurantLocation.lat,
+          lon: restaurantLocation.lon,
+          name: restaurantLocation.name || professional.fullName || 'Restaurant',
+          address: restaurantLocation.address,
+        });
+
+        this.logger.log(`Restaurant location sent to ${client.id} for order ${orderId}`);
+      } else {
+        this.logger.warn(`No location found for professional ${order.professionalId} in order ${orderId}`);
+      }
+
+      // Join the order room
+      client.join(orderId);
+
+      this.logger.log(`Client ${client.id} (${userType}) joined order ${orderId}`);
+
+      // Notify others in the room
+      this.server.to(orderId).emit('user-joined', {
+        userType,
+        clientId: client.id,
+      });
+    } catch (error) {
+      this.logger.error(`Error in join-order: ${error.message}`, error.stack);
+      client.emit('error', { message: 'Failed to join order room' });
+    }
   }
 
   @SubscribeMessage('start-sharing')
@@ -79,6 +140,28 @@ export class OrderTrackingGateway {
     // If sharing disabled, ignore
     if (!this.activeSharing.get(orderId)) return;
 
+    // Get restaurant location for distance calculation
+    const restaurantLocation = this.restaurantLocations.get(orderId);
+    let distance: number | null = null;
+    let distanceFormatted: string | null = null;
+
+    if (restaurantLocation) {
+      // Calculate distance between user and restaurant
+      distance = calculateDistance(
+        lat,
+        lng,
+        restaurantLocation.lat,
+        restaurantLocation.lon,
+      );
+      
+      // Format distance
+      if (distance < 1) {
+        distanceFormatted = `${Math.round(distance * 1000)} m`;
+      } else {
+        distanceFormatted = `${distance.toFixed(2)} km`;
+      }
+    }
+
     // Broadcast location to the restaurant and other listeners
     this.server.to(orderId).emit('location-update', {
       userId,
@@ -86,6 +169,13 @@ export class OrderTrackingGateway {
       lng,
       accuracy: accuracy || null,
       timestamp: Date.now(),
+      distance: distance, // Distance in kilometers
+      distanceFormatted: distanceFormatted, // Formatted string (e.g., "2.5 km" or "150 m")
+      restaurantLocation: restaurantLocation ? {
+        lat: restaurantLocation.lat,
+        lon: restaurantLocation.lon,
+        name: restaurantLocation.name,
+      } : null,
     });
   }
 }

@@ -87,6 +87,23 @@ export class ProfessionalAccount {
 
   @Prop({ type: Number, default: 0 })
   followingCount: number;
+
+  @Prop({
+    type: [{
+      name: { type: String, required: false },
+      address: { type: String, required: false },
+      lat: { type: Number, required: true },
+      lon: { type: Number, required: true },
+    }],
+    default: [],
+  })
+  locations?: {
+    name?: string;      // Optional, like "Main Branch"
+    address?: string;   // Human-readable address
+    lat: number;        // Latitude (required)
+    lon: number;        // Longitude (required)
+  }[];
+
 }
 
 export const ProfessionalSchema = SchemaFactory.createForClass(ProfessionalAccount);
