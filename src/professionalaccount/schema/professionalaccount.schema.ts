@@ -98,11 +98,11 @@ export class ProfessionalAccount {
     default: [],
   })
   locations?: {
-    name?: string;      // Optional, like "Main Branch"
-    address?: string;   // Human-readable address
+  name?: string;      // Optional, like "Main Branch"
+  address?: string;   // Human-readable address
     lat: number;        // Latitude (required)
     lon: number;        // Longitude (required)
-  }[];
+}[];
 
 }
 

@@ -8,6 +8,7 @@ import { ProfessionalAccount, ProfessionalSchema } from 'src/professionalaccount
 import { LoyaltyService } from './LoyaltyService';
 import { AiValidationService } from './ai-validation.service';
 import { OrderModule } from 'src/order/order.module';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { OrderModule } from 'src/order/order.module';
       { name: ProfessionalAccount.name, schema: ProfessionalSchema },
     ]),
     OrderModule, // ✅ Import OrderModule pour accéder à OrderService
+    NotificationModule,
   ],
   controllers: [ReclamationController],
   providers: [ReclamationService, AiValidationService, LoyaltyService],

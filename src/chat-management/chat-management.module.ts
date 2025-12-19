@@ -13,6 +13,7 @@ import {
   ProfessionalAccount,
   ProfessionalSchema,
 } from '../professionalaccount/schema/professionalaccount.schema';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import {
       { name: UserAccount.name, schema: UserSchema },
       { name: ProfessionalAccount.name, schema: ProfessionalSchema },
     ]),
+    NotificationModule,
   ],
   controllers: [ChatManagementController],
   providers: [ChatManagementService, ChatManagementGateway, SpamDetectionService, BadWordsDetectionService],

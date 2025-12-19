@@ -77,4 +77,9 @@ export class UpdateProfessionalDto {
   @ValidateNested({ each: true })
   @Type(() => LocationDto)
   locations?: LocationDto[];
+  
+   @IsOptional()
+  @IsString()
+  profilePictureUrl?: string;
+
 }

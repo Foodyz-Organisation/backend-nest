@@ -74,6 +74,12 @@ export class Order {
 
   @Prop()
   notes?: string; // Optional: customer notes
+
+  @Prop({ type: String, enum: ['CASH', 'CARD'], required: true })
+  paymentMethod: 'CASH' | 'CARD';
+
+  @Prop({ type: Types.ObjectId, ref: 'Payment', required: false })
+  paymentId?: Types.ObjectId; // Reference to Payment document
 }
 
 export const OrderSchema = SchemaFactory.createForClass(Order);

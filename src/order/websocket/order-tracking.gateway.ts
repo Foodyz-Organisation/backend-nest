@@ -82,15 +82,15 @@ export class OrderTrackingGateway {
       }
 
       // Join the order room
-      client.join(orderId);
+    client.join(orderId);
 
       this.logger.log(`Client ${client.id} (${userType}) joined order ${orderId}`);
 
       // Notify others in the room
-      this.server.to(orderId).emit('user-joined', {
-        userType,
-        clientId: client.id,
-      });
+    this.server.to(orderId).emit('user-joined', {
+      userType,
+      clientId: client.id,
+    });
     } catch (error) {
       this.logger.error(`Error in join-order: ${error.message}`, error.stack);
       client.emit('error', { message: 'Failed to join order room' });

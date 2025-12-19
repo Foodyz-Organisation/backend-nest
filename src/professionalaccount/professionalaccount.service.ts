@@ -122,6 +122,10 @@ async update(
   if (updateDto.documents !== undefined)
     prof.documents = updateDto.documents;
 
+  // ✅ AJOUTEZ CETTE LIGNE (elle manque actuellement) :
+  if (updateDto.profilePictureUrl !== undefined)
+  prof.profilePictureUrl = updateDto.profilePictureUrl;
+
   // Update locations if provided
   if (updateDto.locations !== undefined)
     prof.locations = updateDto.locations;

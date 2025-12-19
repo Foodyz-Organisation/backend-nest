@@ -15,6 +15,8 @@ import {
   ProfessionalAccount,
   ProfessionalDocument,
 } from '../professionalaccount/schema/professionalaccount.schema';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationType } from '../notification/schema/notification.schema';
 
 type SendMessagePayload = {
   conversationId: string;
@@ -33,6 +35,7 @@ export class ChatManagementService {
     @InjectModel(UserAccount.name) private userModel: Model<UserDocument>,
     @InjectModel(ProfessionalAccount.name)
     private profModel: Model<ProfessionalDocument>,
+    private notificationService: NotificationService,
   ) { }
 
   async getChatsForUser(userId: string) {
@@ -211,6 +214,54 @@ export class ChatManagementService {
     const saved = await message.save();
     conversation.updatedAt = new Date();
     await conversation.save();
+
+    // Create notification for the recipient (the participant that is not the sender)
+    try {
+      const recipientId = conversation.participants.find(
+        (p) => p.toString() !== senderObjectId.toString(),
+      );
+
+      if (recipientId) {
+        // Determine if recipient is a User or Professional
+        let recipientModel: 'UserAccount' | 'ProfessionalAccount' | undefined;
+        const userRecipient = await this.userModel.findById(recipientId).lean();
+        if (userRecipient) {
+          recipientModel = 'UserAccount';
+        } else {
+          const profRecipient = await this.profModel.findById(recipientId).lean();
+          if (profRecipient) {
+            recipientModel = 'ProfessionalAccount';
+          }
+        }
+
+        // Get sender name for the notification
+        const userSender = await this.userModel.findById(senderObjectId).lean();
+        const profSender = userSender ? null : await this.profModel.findById(senderObjectId).lean();
+        const senderName = userSender?.fullName || userSender?.username || 
+                          profSender?.fullName || (profSender as any)?.professionalData?.fullName || 'Someone';
+
+        if (recipientModel) {
+          await this.notificationService.createChatNotification(
+            NotificationType.MESSAGE_RECEIVED,
+            (saved._id as Types.ObjectId).toString(),
+            (conversation._id as Types.ObjectId).toString(),
+            senderObjectId.toString(),
+            senderName,
+            recipientId.toString(),
+            recipientModel,
+            content.substring(0, 100), // message preview
+            {
+              messageId: (saved._id as Types.ObjectId).toString(),
+              conversationId: (conversation._id as Types.ObjectId).toString(),
+              senderId: senderObjectId.toString(),
+            },
+          );
+        }
+      }
+    } catch (notifError) {
+      console.error('Error creating chat notification:', notifError);
+      // Don't fail the message sending if notification fails
+    }
 
     return saved;
   }

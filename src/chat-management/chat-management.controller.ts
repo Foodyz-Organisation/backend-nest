@@ -47,6 +47,7 @@ export class ChatManagementController {
   // 🔹 Récupérer les conversations de l'utilisateur courant
   @Get('conversations')
   async getMyConversations(@Req() req: any) {
+    console.log('chat /conversations user =', req.user);
     const userId = this.getUserId(req);
     return this.chatService.getConversationsForUser(userId);
   }

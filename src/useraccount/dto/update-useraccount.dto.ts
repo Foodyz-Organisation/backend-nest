@@ -21,7 +21,7 @@ export class UpdateUserDto {
   @IsOptional()
   @IsEmail()
   email?: string;
-
+  
   @ApiPropertyOptional({ description: 'Password (plain text, will be hashed)' })
   @IsOptional()
   @IsString()

@@ -77,4 +77,8 @@ export class CreateOrderDto {
 
   @IsOptional()
   scheduledTime?: Date; // Optional: for future orders
+
+  @IsEnum(['CASH', 'CARD'])
+  @IsNotEmpty()
+  paymentMethod: 'CASH' | 'CARD'; // Required: payment method selection
 }

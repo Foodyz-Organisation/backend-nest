@@ -21,6 +21,7 @@ import { MenuitemModule } from './menuitem/menuitem.module';
 import { OrderModule } from './order/order.module';
 import { CartitemModule } from './cartitem/cartitem.module';
 import { ChatManagementModule } from './chat-management/chat-management.module';
+import { NotificationModule } from './notification/notification.module';
 
 
 
@@ -48,6 +49,7 @@ import { ChatManagementModule } from './chat-management/chat-management.module';
     MenuitemModule,
     OrderModule,
     CartitemModule,
+    NotificationModule,
   ],
   controllers: [
     StaticFilesController,

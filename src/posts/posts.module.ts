@@ -12,6 +12,7 @@ import { UserAccount, UserSchema } from '../useraccount/schema/useraccount.schem
 import { ProfessionalAccount, ProfessionalSchema } from 'src/professionalaccount/schema/professionalaccount.schema';
 import { Like, LikeSchema } from './schemas/like.schema'; // <-- NEW
 import { Save, SaveSchema } from './schemas/save.schema'; // <-- NEW
+import { NotificationModule } from '../notification/notification.module';
 
 
 @Module({
@@ -24,6 +25,7 @@ import { Save, SaveSchema } from './schemas/save.schema'; // <-- NEW
       { name: Like.name, schema: LikeSchema }, // <-- NEW
       { name: Save.name, schema: SaveSchema },
     ]),
+    NotificationModule,
   ],
   controllers: [PostsController],
   providers: [PostsService],

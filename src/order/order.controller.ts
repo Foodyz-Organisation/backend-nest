@@ -12,6 +12,7 @@ import {
 import { OrderService } from './order.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order.dto';
+import { ConfirmPaymentDto } from './dto/confirm-payment.dto';
 
 @Controller('orders')
 @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
@@ -101,6 +102,18 @@ async deleteAllOrdersByProfessional(
   async deleteOrder(@Param('id') orderId: string): Promise<{ message: string }> {
     await this.orderService.deleteOrder(orderId);
     return { message: 'Order deleted successfully' };
+  }
+
+  // -----------------------------
+  // CONFIRM CARD PAYMENT
+  // POST /orders/payment/confirm
+  // Body: { paymentIntentId: string, paymentMethodId: string }
+  // Note: Frontend should use Stripe SDK to create PaymentMethod from card details,
+  //       then send the PaymentMethod ID (pm_xxx) to this endpoint.
+  // -----------------------------
+  @Post('payment/confirm')
+  async confirmPayment(@Body() dto: ConfirmPaymentDto) {
+    return this.orderService.confirmPayment(dto.paymentIntentId, dto.paymentMethodId);
   }
 
   

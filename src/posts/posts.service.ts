@@ -18,6 +18,8 @@ import { ProfessionalAccount, ProfessionalDocument } from 'src/professionalaccou
 import { Save, SaveDocument } from './schemas/save.schema';
 import { Like, LikeDocument } from './schemas/like.schema';
 import { execSync } from 'child_process';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationType } from '../notification/schema/notification.schema';
 
 type MulterFile = Express.Multer.File;
 
@@ -58,7 +60,7 @@ export class PostsService {
     @InjectModel(ProfessionalAccount.name) private readonly professionalModel: Model<ProfessionalDocument>, // <-- ADD THIS
     @InjectModel(Like.name) private readonly likeModel: Model<LikeDocument>,   // <-- NEW
     @InjectModel(Save.name) private readonly saveModel: Model<SaveDocument>,
-      
+    private notificationService: NotificationService,
   ) {}
 
   /**
@@ -108,6 +110,32 @@ export class PostsService {
         console.error('[ERROR TYPE]', typeof error);
       }
     }
+
+    // Create notification for post creation (notify followers)
+    // Note: You can enhance this to fetch followers and notify them individually
+    try {
+      await this.notificationService.createPostNotification(
+        NotificationType.POST_CREATED,
+        savedPost._id.toString(),
+        savedPost.caption,
+        savedPost.ownerId.toString(),
+        ownerModel,
+        undefined, // recipientId - will be set per follower if you enhance this
+        undefined, // recipientModel
+        {
+          postId: savedPost._id.toString(),
+          postCaption: savedPost.caption,
+          ownerId: savedPost.ownerId.toString(),
+          ownerModel: ownerModel,
+          mediaType: savedPost.mediaType,
+          foodType: savedPost.foodType,
+        },
+      );
+    } catch (notifError) {
+      console.error('[ERROR] Failed to create post notification:', notifError);
+      // Don't fail the post creation if notification fails
+    }
+
     return populatedPost as PostDocument; // Assert type here
   }
 

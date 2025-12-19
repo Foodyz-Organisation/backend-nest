@@ -5,6 +5,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Deals, DealsDocument } from './schemas/deals.schema';
 import { Model } from 'mongoose';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class DealsService {
@@ -12,12 +13,37 @@ export class DealsService {
 
   constructor(
     @InjectModel(Deals.name) private dealsModel: Model<DealsDocument>,
+    private notificationService: NotificationService,
   ) { }
 
   async create(createDealDto: CreateDealDto): Promise<Deals> {
     try {
       const createdDeals = new this.dealsModel(createDealDto);
-      return await createdDeals.save();
+      const savedDeal = await createdDeals.save();
+
+      // Create notification for all users about the new deal
+      try {
+        await this.notificationService.createDealNotification(
+          (savedDeal._id as any).toString(),
+          savedDeal.description.substring(0, 50), // Use description as deal name or extract from description
+          savedDeal.restaurantName,
+          undefined, // userId - can be set if you want to notify specific users
+          undefined, // professionalId
+          {
+            dealId: (savedDeal._id as any).toString(),
+            dealName: savedDeal.description.substring(0, 50),
+            restaurantName: savedDeal.restaurantName,
+            category: savedDeal.category,
+            startDate: savedDeal.startDate,
+            endDate: savedDeal.endDate,
+          },
+        );
+      } catch (notifError) {
+        this.logger.error('Error creating deal notification:', notifError);
+        // Don't fail the deal creation if notification fails
+      }
+
+      return savedDeal;
     } catch (error) {
       console.error('Erreur lors de la création :', error);
       throw error;
