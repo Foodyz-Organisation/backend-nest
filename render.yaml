@@ -3,7 +3,8 @@ services:
     name: foodyz-backend
     env: node
     plan: starter
-    buildCommand: npm install && npm run build
+    # Using npx to ensure nest CLI is found even if in devDependencies
+    buildCommand: npm install && npx nest build
     startCommand: npm run start:prod
     envVars:
       - key: NODE_ENV
@@ -23,4 +24,7 @@ services:
       #   sync: false
       # - key: GEMINI_API_KEY
       #   sync: false
+    # Note: For video thumbnail generation, ffmpeg must be available in the system
+    # Render's build environment should include ffmpeg, but if you encounter issues,
+    # you may need to use a Docker image or install ffmpeg via buildpack
 
