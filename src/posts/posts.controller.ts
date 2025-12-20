@@ -27,7 +27,7 @@ import {
   ApiQuery, // Make sure ApiQuery is imported
 } from '@nestjs/swagger';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
+import { memoryStorage } from 'multer';
 import { extname } from 'path';
 import { PostDocument, Post as PostSchema, FoodType } from './schemas/post.schema';
 // import { MulterFile } from '../common/types/multer-file.type'; // Removed as Express.Multer.File is used directly
@@ -65,14 +65,7 @@ export class PostsController {
   @ApiResponse({ status: 400, description: 'Bad request (e.g., invalid file type or size)' })
   @UseInterceptors(
     FilesInterceptor('files', 10, {
-      storage: diskStorage({
-        destination: './uploads',
-        filename: (req, file, cb) => {
-          const randomName = Array(32).fill(null).map(() => (Math.round(Math.random() * 16)).toString(16)).join('');
-          const timestamp = Date.now();
-          cb(null, `${timestamp}-${randomName}${extname(file.originalname)}`);
-        },
-      }),
+      storage: memoryStorage(), // Use memory storage for Supabase uploads
       fileFilter: (req, file, cb) => {
         if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|mp4|mov|avi|wmv)$/)) {
           return cb(new BadRequestException('Only image and video files are allowed!'), false);

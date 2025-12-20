@@ -8,12 +8,16 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger'; // <-- NEW
 import { Types } from 'mongoose'; // <-- NEW IMPORT for ObjectId validation
 import { FileInterceptor } from '@nestjs/platform-express'; // Import FileInterceptor
 import { ImageUploadService } from 'src/menuitem/imageuploadservice'; // ⭐ Adjust this import path ⭐
+import { SupabaseStorageService } from '../common/services/supabase-storage.service';
 
 
 @ApiTags('users')// Group endpoints under 'users' tag in Swagger
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) { }
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly supabaseStorage: SupabaseStorageService,
+  ) { }
 
   @Post()
   @ApiOperation({ summary: 'Create a new user account' })
@@ -95,19 +99,18 @@ export class UsersController {
       throw new BadRequestException('Image file is required.');
     }
 
-    // 1. Construct the path/URL saved in the database
-    // This assumes your static assets are served from /uploads
-    const relativePath = `/uploads/${file.filename}`;
+    // 1. Upload to Supabase and get the public URL
+    const imageUrl = await this.supabaseStorage.uploadMulterFile(file, 'profiles');
 
     // 2. Call the new service method to update the profilePictureUrl field
     const updatedUser = await this.usersService.updateProfilePicture(
       id,
-      relativePath,
+      imageUrl,
     );
 
     return {
       message: 'Profile image updated successfully.',
-      profilePictureUrl: relativePath,
+      profilePictureUrl: imageUrl,
       user: updatedUser,
     };
   }

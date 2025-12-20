@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: foodyz-backend
+    env: node
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: MONGODB_URI
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SUPABASE_MEDIA_BUCKET_NAME
+        value: uploads
+      # Add other environment variables as needed
+      # - key: JWT_SECRET
+      #   sync: false
+      # - key: GEMINI_API_KEY
+      #   sync: false
+

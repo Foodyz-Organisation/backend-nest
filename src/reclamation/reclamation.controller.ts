@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Get, Param, Put, Res, StreamableFile, Logger } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Get, Param, Put, Res, StreamableFile, Logger, NotFoundException } from '@nestjs/common';
 import type { Response } from 'express';
 import { ReclamationService } from './reclamation.service';
 import { LoyaltyService, PointsBalance, Reward } from 'src/reclamation/LoyaltyService';
@@ -11,9 +11,7 @@ import { OrderService } from '../order/order.service';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ProfessionalAccount } from '../professionalaccount/schema/professionalaccount.schema';
-import * as fs from 'fs';
-import * as path from 'path';
-import { createReadStream } from 'fs';
+import { SupabaseStorageService } from '../common/services/supabase-storage.service';
 
 @ApiTags('Reclamation')
 @Controller('reclamation')
@@ -25,46 +23,17 @@ export class ReclamationController {
     private readonly loyaltyService: LoyaltyService,
     private readonly orderService: OrderService,
     @InjectModel(ProfessionalAccount.name) private professionalModel: Model<ProfessionalAccount>,
+    private readonly supabaseStorage: SupabaseStorageService,
   ) { }
 
-  // ✅ NOUVELLE ROUTE: Servir les images manuellement
+  // ✅ DEPRECATED: Images are now served directly from Supabase
+  // This endpoint is kept for backward compatibility but redirects to Supabase URLs
   @Get('image/:filename')
-  @ApiOperation({ summary: 'Récupérer une image de réclamation' })
-  async getImage(
-    @Param('filename') filename: string,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<StreamableFile> {
-    const imagePath = path.join(process.cwd(), 'uploads', 'reclamations', filename);
-
-    console.log('📷 Requête image:', filename);
-    console.log('📁 Chemin complet:', imagePath);
-    console.log('✅ Fichier existe:', fs.existsSync(imagePath));
-
-    if (!fs.existsSync(imagePath)) {
-      console.error('❌ Fichier introuvable:', imagePath);
-      throw new Error('Image not found');
-    }
-
-    const ext = path.extname(filename).toLowerCase();
-    let contentType = 'image/jpeg';
-
-    if (ext === '.png') contentType = 'image/png';
-    else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
-    else if (ext === '.gif') contentType = 'image/gif';
-    else if (ext === '.webp') contentType = 'image/webp';
-
-    console.log('📄 Content-Type:', contentType);
-
-    res.set({
-      'Content-Type': contentType,
-      'Access-Control-Allow-Origin': '*',
-      'Cache-Control': 'public, max-age=31536000',
-    });
-
-    const file = createReadStream(imagePath);
-    console.log('✅ Image servie avec succès');
-
-    return new StreamableFile(file);
+  @ApiOperation({ summary: 'Get reclamation image (redirects to Supabase)' })
+  async getImage(@Param('filename') filename: string, @Res() res: Response) {
+    // Redirect to Supabase URL if the filename contains the path structure
+    const supabaseUrl = this.supabaseStorage.getPublicUrl(`reclamations/${filename}`);
+    return res.redirect(supabaseUrl);
   }
 
   // ✅ CRÉER une réclamation (CLIENT) - AVEC UPLOAD BASE64 ET ASSOCIATION RESTAURANT
@@ -85,48 +54,25 @@ export class ReclamationController {
     const photoPaths: string[] = [];
 
     if (createReclamationDto.photos && createReclamationDto.photos.length > 0) {
-      const uploadDir = './uploads/reclamations';
-
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
-      }
-
       for (let i = 0; i < createReclamationDto.photos.length; i++) {
-        let base64Data = createReclamationDto.photos[i];
+        const base64Data = createReclamationDto.photos[i];
 
         try {
           this.logger.log(`📷 Image ${i + 1} - Longueur:`, base64Data.length);
 
-          let ext = 'jpeg';
-          let data = base64Data;
+          // Upload to Supabase Storage
+          const fileName = `${Date.now()}-${i}-${Math.round(Math.random() * 1e9)}`;
+          const publicUrl = await this.supabaseStorage.uploadBase64Image(
+            base64Data,
+            'reclamations',
+            fileName,
+          );
 
-          const matchesComplete = base64Data.match(/^data:image\/(\w+);base64,(.+)$/);
-          if (matchesComplete) {
-            ext = matchesComplete[1];
-            data = matchesComplete[2];
-          } else if (!base64Data.startsWith('data:')) {
-            data = base64Data.replace(/\s/g, '');
-            const buffer = Buffer.from(data, 'base64');
-            if (buffer[0] === 0xFF && buffer[1] === 0xD8) ext = 'jpeg';
-            else if (buffer[0] === 0x89 && buffer[1] === 0x50) ext = 'png';
-          } else {
-            const matchesSimple = base64Data.match(/^data:image\/(\w+);base64,/);
-            if (matchesSimple) {
-              ext = matchesSimple[1];
-              data = base64Data.split(',')[1];
-            }
-          }
-
-          const filename = `${Date.now()}-${i}-${Math.round(Math.random() * 1e9)}.${ext}`;
-          const filepath = path.join(uploadDir, filename);
-
-          fs.writeFileSync(filepath, Buffer.from(data, 'base64'));
-
-          photoPaths.push(`/reclamation/image/${filename}`);
-          this.logger.log(`✅ Image ${i + 1} sauvegardée: ${filename}`);
-          this.logger.log(`📍 URL: /reclamation/image/${filename}`);
+          photoPaths.push(publicUrl);
+          this.logger.log(`✅ Image ${i + 1} uploadée sur Supabase: ${publicUrl}`);
         } catch (error) {
-          this.logger.error(`❌ Erreur sauvegarde image ${i + 1}:`, error);
+          this.logger.error(`❌ Erreur upload image ${i + 1}:`, error);
+          throw error;
         }
       }
     }

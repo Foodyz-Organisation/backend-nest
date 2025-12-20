@@ -9,7 +9,9 @@ import ffmpeg from 'fluent-ffmpeg'; // <--- Change to this
 import { Types, SortOrder } from 'mongoose'; // <--- Ensure SortOrder is imported here
 
 import { join, extname, basename } from 'path'; // <--- Add path utilities for file handling
-import { unlink } from 'fs/promises'; // <--- Add for file deletion (optional, but good for cleanup)
+import { unlink, writeFile, readFile } from 'fs/promises'; // <--- Add for file operations
+import * as fs from 'fs'; // For temporary file operations
+import * as os from 'os'; // For temporary directory
 
 import { Comment, CommentDocument } from './schemas/comment.schema'; // Import your Comment schema
 import { CreateCommentDto } from './dto/create-comment.dto';
@@ -21,6 +23,7 @@ import { execSync } from 'child_process';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../notification/schema/notification.schema';
 import { InteractionService } from './interaction.service';
+import { SupabaseStorageService } from '../common/services/supabase-storage.service';
 
 type MulterFile = Express.Multer.File;
 
@@ -42,6 +45,7 @@ export class PostsService {
     @InjectModel(Save.name) private readonly saveModel: Model<SaveDocument>,
     private notificationService: NotificationService,
     private interactionService: InteractionService,
+    private supabaseStorage: SupabaseStorageService,
   ) {}
 
   /**
@@ -70,25 +74,21 @@ export class PostsService {
         throw new Error('Failed to retrieve populated post after creation.');
     }
 
-    // Your existing reel processing logic here
+    // Process video posts: Extract thumbnail URL if it's a reel
+    // Note: Thumbnails are generated during upload and included in mediaUrls
+    // We need to separate video URLs from thumbnail URLs and store thumbnail separately
     if (savedPost.mediaType === MediaType.REEL && savedPost.mediaUrls.length > 0) {
-      const filename = savedPost.mediaUrls[0].substring(savedPost.mediaUrls[0].lastIndexOf('/') + 1);
-      const uploadDir = join(process.cwd(), 'uploads');
-      const localFilePath = join(uploadDir, filename);
-
-      try {
-        const { thumbnailUrl, duration, aspectRatio } = await this._processVideoMetadataAndThumbnail(localFilePath);
-
+      // Find thumbnail URL (contains '/thumbnails/' in path)
+      const thumbnailUrl = savedPost.mediaUrls.find(url => url.includes('/thumbnails/') || url.includes('thumbnails'));
+      
+      if (thumbnailUrl) {
+        // Remove thumbnail from mediaUrls array (keep only video URLs)
+        savedPost.mediaUrls = savedPost.mediaUrls.filter(url => !url.includes('/thumbnails/') && !url.includes('thumbnails'));
         savedPost.thumbnailUrl = thumbnailUrl;
-        savedPost.duration = duration;
-        savedPost.aspectRatio = aspectRatio;
         await savedPost.save();
-      } catch (error) {
-        console.error(`[ERROR] Failed to process reel metadata for Post ID ${savedPost._id}:`, error);
-        if (error instanceof Error) {
-            console.error('[ERROR STACK]', error.stack);
-        }
-        console.error('[ERROR TYPE]', typeof error);
+        console.log(`[SUCCESS] Thumbnail URL extracted and saved for reel post: ${savedPost._id}`);
+      } else {
+        console.warn(`[WARN] No thumbnail URL found for reel post: ${savedPost._id}. MediaUrls: ${savedPost.mediaUrls.join(', ')}`);
       }
     }
 
@@ -121,8 +121,25 @@ export class PostsService {
   }
 
   async uploadFiles(files: MulterFile[]): Promise<UploadResponseDto> {
-    const baseUrl = 'http://10.0.2.2:3000'; // Or your host machine's IP for physical device
-    const urls = files.map(file => `${baseUrl}/uploads/${file.filename}`);
+    const urls: string[] = [];
+
+    for (const file of files) {
+      // Upload the main file to Supabase
+      const fileUrl = await this.supabaseStorage.uploadMulterFile(file, 'posts');
+      urls.push(fileUrl);
+
+      // If it's a video file, generate and upload thumbnail
+      if (file.mimetype.startsWith('video/')) {
+        try {
+          const thumbnailUrl = await this._processVideoAndUploadThumbnail(file);
+          urls.push(thumbnailUrl); // Add thumbnail URL to the response
+        } catch (error) {
+          console.error(`[ERROR] Failed to generate thumbnail for video: ${file.originalname}`, error);
+          // Continue even if thumbnail generation fails - video is already uploaded
+        }
+      }
+    }
+
     return { urls };
   }
 
@@ -412,24 +429,77 @@ async update(
   }
 
 
-   private async _processVideoMetadataAndThumbnail(
-    localFilePath: string,
-  ): Promise<{ thumbnailUrl: string; duration: number; aspectRatio: string }> {
-    console.log(`[DEBUG] _processVideoMetadataAndThumbnail called with localFilePath: ${localFilePath}`);
+  /**
+   * Process video file from buffer, generate thumbnail, and upload to Supabase
+   * @param file Multer file object with video buffer
+   * @returns The Supabase URL of the uploaded thumbnail
+   */
+  private async _processVideoAndUploadThumbnail(
+    file: MulterFile,
+  ): Promise<string> {
+    const tempDir = os.tmpdir();
+    const tempVideoPath = join(tempDir, `video-${Date.now()}-${Math.random().toString(36).substring(7)}${extname(file.originalname)}`);
+    const tempThumbnailPath = join(tempDir, `thumb-${Date.now()}-${Math.random().toString(36).substring(7)}.png`);
+
+    try {
+      // Write video buffer to temporary file
+      await writeFile(tempVideoPath, file.buffer);
+
+      // Process video to generate thumbnail and get metadata
+      const result = await this._processVideoMetadataAndThumbnail(tempVideoPath, tempThumbnailPath);
+
+      // Upload thumbnail to Supabase
+      const thumbnailBuffer = await readFile(tempThumbnailPath);
+      const timestamp = Date.now();
+      const randomString = Math.random().toString(36).substring(7);
+      const thumbnailPath = `posts/thumbnails/${timestamp}-${randomString}.png`;
+      
+      const thumbnailUrl = await this.supabaseStorage.uploadFile(
+        thumbnailPath,
+        thumbnailBuffer,
+        'image/png',
+      );
+
+      console.log(`[SUCCESS] Thumbnail generated and uploaded: ${thumbnailUrl}`);
+      return thumbnailUrl;
+    } catch (error) {
+      console.error(`[ERROR] Failed to process video thumbnail:`, error);
+      throw new BadRequestException(`Failed to generate video thumbnail: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      // Clean up temporary files
+      try {
+        if (fs.existsSync(tempVideoPath)) await unlink(tempVideoPath);
+        if (fs.existsSync(tempThumbnailPath)) await unlink(tempThumbnailPath);
+      } catch (cleanupError) {
+        console.error(`[WARN] Failed to clean up temp files:`, cleanupError);
+      }
+    }
+  }
+
+  /**
+   * Process video file to extract metadata and generate thumbnail
+   * @param videoPath Path to the video file
+   * @param thumbnailPath Path where thumbnail should be saved
+   * @returns Object with duration, aspectRatio, and thumbnailPath
+   */
+  private async _processVideoMetadataAndThumbnail(
+    videoPath: string,
+    thumbnailPath: string,
+  ): Promise<{ duration: number; aspectRatio: string }> {
+    console.log(`[DEBUG] Processing video: ${videoPath}`);
 
     return new Promise((resolve, reject) => {
       // 1. Get video metadata (duration, aspect ratio)
-      ffmpeg.ffprobe(localFilePath, (err, metadata) => {
+      ffmpeg.ffprobe(videoPath, (err, metadata) => {
         if (err) {
-          console.error(`[FFPROBE ERROR] for ${localFilePath}:`, err);
+          console.error(`[FFPROBE ERROR] for ${videoPath}:`, err);
           return reject(new BadRequestException(`Failed to process video: ${err.message}`));
         }
-        console.log(`[FFPROBE DEBUG] Metadata obtained for ${localFilePath}`);
-
+        console.log(`[FFPROBE DEBUG] Metadata obtained for ${videoPath}`);
 
         const videoStream = metadata.streams.find(s => s.codec_type === 'video');
         if (!videoStream) {
-          console.error(`[FFPROBE ERROR] No video stream found in ${localFilePath}`);
+          console.error(`[FFPROBE ERROR] No video stream found in ${videoPath}`);
           return reject(new BadRequestException('No video stream found in the file.'));
         }
 
@@ -438,27 +508,19 @@ async update(
         const height = videoStream.height;
         const aspectRatio = width && height ? `${width}:${height}` : 'unknown';
 
-        const uploadDir = join(process.cwd(), 'uploads'); // Ensure this is also absolute
-        const filenameWithoutExt = basename(localFilePath, extname(localFilePath));
-        const thumbnailFileName = `${filenameWithoutExt}-thumbnail.png`;
-        const thumbnailPath = join(uploadDir, thumbnailFileName);
-
-        // Ensure the directory for thumbnail exists (Multer should handle 'uploads', but good to be explicit for sub-dirs if any)
-        // You might need 'fs.mkdirSync(uploadDir, { recursive: true });' if 'uploads' might not exist
-
-        console.log(`[DEBUG] Attempting to generate thumbnail at: ${thumbnailPath}`);
-        ffmpeg(localFilePath)
+        console.log(`[DEBUG] Generating thumbnail at: ${thumbnailPath}`);
+        // Generate thumbnail from video
+        ffmpeg(videoPath)
           .frames(1)
-          .seek('0:01')
-          .size('320x?')
+          .seek('0:01') // Seek to 1 second
+          .size('320x?') // Resize to 320px width, maintain aspect ratio
           .output(thumbnailPath)
-          .on('end', async () => {
-            const thumbnailUrl = `http://10.0.2.2:3000/uploads/${thumbnailFileName}`; // Adjust baseUrl if needed
-            console.log(`[DEBUG] Thumbnail generated: ${thumbnailUrl}`);
-            resolve({ thumbnailUrl, duration, aspectRatio });
+          .on('end', () => {
+            console.log(`[DEBUG] Thumbnail generated successfully: ${thumbnailPath}`);
+            resolve({ duration, aspectRatio });
           })
           .on('error', (thumbErr) => {
-            console.error(`[THUMBNAIL ERROR] for ${localFilePath}:`, thumbErr);
+            console.error(`[THUMBNAIL ERROR] for ${videoPath}:`, thumbErr);
             reject(new BadRequestException(`Failed to generate thumbnail: ${thumbErr.message}`));
           })
           .run();

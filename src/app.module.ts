@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UseraccountModule } from './useraccount/useraccount.module';
@@ -9,19 +9,15 @@ import { AuthModule } from './auth/auth.module';
 import { ReclamationModule } from './reclamation/reclamation.module';
 import { DealsModule } from './deals/deals.module';
 import { EventsModule } from './events/events.module';
-import { StaticFilesController } from './static-files.controller'; // ✅ AJOUTER
+import { StaticFilesController } from './static-files.controller';
 import { PostsModule } from './posts/posts.module';
-
-// --- ADD THESE IMPORTS FOR STATIC FILE SERVING ---
-import { ServeStaticModule } from '@nestjs/serve-static';
-import { join } from 'path';
 import { FollowsModule } from './follows/follows.module';
-// --- END ADDITIONS ---
 import { MenuitemModule } from './menuitem/menuitem.module';
 import { OrderModule } from './order/order.module';
 import { CartitemModule } from './cartitem/cartitem.module';
 import { ChatManagementModule } from './chat-management/chat-management.module';
 import { NotificationModule } from './notification/notification.module';
+import { StorageModule } from './common/storage.module';
 
 
 
@@ -32,11 +28,14 @@ import { NotificationModule } from './notification/notification.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
-    MongooseModule.forRoot(process.env.MONGO_URI || 'mongodb://localhost:27017/Foodyz'),
-    ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', 'uploads'),
-      serveRoot: '/uploads',
+    MongooseModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => ({
+        uri: configService.get<string>('MONGODB_URI') || 'mongodb://localhost:27017/Foodyz',
+      }),
+      inject: [ConfigService],
     }),
+    StorageModule,
     UseraccountModule,
     ProfessionalaccountModule,
     AuthModule,
