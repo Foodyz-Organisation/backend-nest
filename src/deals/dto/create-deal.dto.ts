@@ -1,6 +1,10 @@
-import { IsString, IsBoolean, IsDateString, IsOptional } from 'class-validator';
+import { IsString, IsBoolean, IsDateString, IsOptional, IsNumber, IsArray, IsMongoId, Min, Max } from 'class-validator';
 
-export class CreateDealDto {@IsString()
+export class CreateDealDto {
+  @IsMongoId()
+  professionalId: string; // Restaurant ID
+
+  @IsString()
   restaurantName: string;
 
   @IsString()
@@ -12,6 +16,21 @@ export class CreateDealDto {@IsString()
   @IsString()
   category: string;
 
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  discountPercentage: number; // Discount percentage (e.g., 40%, 50%, 70%)
+
+  @IsOptional()
+  @IsArray()
+  @IsMongoId({ each: true })
+  applicableMenuItems?: string[]; // Optional: specific menu items (empty = all items)
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  applicableCategories?: string[]; // Optional: categories (e.g., ['PIZZA', 'BURGER'])
+
   @IsDateString()
   startDate: string;
 
@@ -20,4 +39,5 @@ export class CreateDealDto {@IsString()
 
   @IsOptional()
   @IsBoolean()
-  isActive?: boolean;}
+  isActive?: boolean;
+}

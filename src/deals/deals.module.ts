@@ -7,10 +7,13 @@ import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: Deals.name, schema: DealsSchema}]),
+    MongooseModule.forFeature([
+      { name: Deals.name, schema: DealsSchema },
+    ]),
     NotificationModule,
   ],
   controllers: [DealsController],
   providers: [DealsService],
+  exports: [DealsService],
 })
 export class DealsModule {}

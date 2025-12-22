@@ -4,11 +4,13 @@ import { MenuItemService } from './menuitem.service';
 import { MenuItemController } from './menuitem.controller';
 import { MenuItem, MenuItemSchema } from './schema/menuitem.schema';
 import { ImageUploadService } from './imageuploadservice';
+import { Deals, DealsSchema } from '../deals/schemas/deals.schema'; // ⭐ Import Deals
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: MenuItem.name, schema: MenuItemSchema },
+      { name: Deals.name, schema: DealsSchema }, // ⭐ Add Deals model
     ]),
   ],
   controllers: [MenuItemController],

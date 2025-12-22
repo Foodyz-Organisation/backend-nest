@@ -17,7 +17,16 @@ export class MenuItem {
   description?: string;
 
   @Prop({ required: true })
-  price: number;
+  price: number; // Original price
+
+  @Prop({ required: false, default: null })
+  discountedPrice?: number; // Discounted price (if deal is active)
+
+  @Prop({ type: Types.ObjectId, ref: 'Deals', required: false })
+  activeDealId?: Types.ObjectId; // Reference to active deal (if any)
+
+  @Prop({ required: false, default: 0 })
+  discountPercentage?: number; // Current discount percentage (if any)
 
   @Prop({ type: String, enum: Category, required: true })
   category: Category;

@@ -42,6 +42,18 @@ class OrderItemDto {
   @IsNotEmpty()
   @IsNumber()
   calculatedPrice: number;
+
+  @IsOptional()
+  @IsNumber()
+  originalPrice?: number; // Original price before discount (if deal was active)
+
+  @IsOptional()
+  @IsNumber()
+  discountPercentage?: number; // Discount percentage applied (if any)
+
+  @IsOptional()
+  @IsMongoId()
+  dealId?: string; // Deal applied to this item (if any)
 }
 
 // Main CreateOrderDto

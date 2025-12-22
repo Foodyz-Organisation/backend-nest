@@ -39,7 +39,16 @@ export class CartItem {
   chosenOptions: { name: string; price: number }[];
 
   @Prop({ required: true })
-  calculatedPrice: number;  // frontend or backend calculated
+  calculatedPrice: number;  // Price used (can be discounted or original)
+
+  @Prop({ required: false })
+  originalPrice?: number; // Original price before discount (if deal is active)
+
+  @Prop({ required: false })
+  discountPercentage?: number; // Discount percentage applied (if any)
+
+  @Prop({ type: Types.ObjectId, ref: 'Deals', required: false })
+  dealId?: Types.ObjectId; // Deal applied to this item (if any)
 }
 
 export const CartItemSchema = SchemaFactory.createForClass(CartItem);

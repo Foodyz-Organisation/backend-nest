@@ -3,7 +3,7 @@ import { CreateDealDto } from './dto/create-deal.dto';
 import { UpdateDealDto } from './dto/update-deal.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Deals, DealsDocument } from './schemas/deals.schema';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { NotificationService } from '../notification/notification.service';
 
@@ -18,24 +18,36 @@ export class DealsService {
 
   async create(createDealDto: CreateDealDto): Promise<Deals> {
     try {
-      const createdDeals = new this.dealsModel(createDealDto);
+      // ⭐ Log for debugging
+      this.logger.log(`🎯 Creating deal for professional: ${createDealDto.professionalId}`);
+      this.logger.log(`💰 Discount: ${createDealDto.discountPercentage}%`);
+      this.logger.log(`📦 Applicable items: ${createDealDto.applicableMenuItems?.length || 0}`);
+      this.logger.log(`📋 Applicable categories: ${createDealDto.applicableCategories?.length || 0}`);
+
+      // Convert string IDs to ObjectIds
+      const dealData = {
+        ...createDealDto,
+        professionalId: new Types.ObjectId(createDealDto.professionalId),
+        applicableMenuItems: (createDealDto.applicableMenuItems || []).map(id => new Types.ObjectId(id)),
+      };
+
+      const createdDeals = new this.dealsModel(dealData);
       const savedDeal = await createdDeals.save();
+
+      this.logger.log(`✅ Deal created successfully: ${savedDeal._id}`);
 
       // Create notification for all users about the new deal
       try {
         await this.notificationService.createDealNotification(
-          (savedDeal._id as any).toString(),
-          savedDeal.description.substring(0, 50), // Use description as deal name or extract from description
+          (savedDeal._id as Types.ObjectId).toString(),
+          savedDeal.description.substring(0, 50),
           savedDeal.restaurantName,
           undefined, // userId - can be set if you want to notify specific users
           undefined, // professionalId
           {
-            dealId: (savedDeal._id as any).toString(),
-            dealName: savedDeal.description.substring(0, 50),
-            restaurantName: savedDeal.restaurantName,
             category: savedDeal.category,
-            startDate: savedDeal.startDate,
             endDate: savedDeal.endDate,
+            discountPercentage: savedDeal.discountPercentage,
           },
         );
       } catch (notifError) {
@@ -54,23 +66,46 @@ export class DealsService {
     return this.dealsModel.find().exec();
   }
 
+  // 🆕 GET ACTIVE DEALS FOR A PROFESSIONAL
+  async findActiveByProfessional(professionalId: string): Promise<Deals[]> {
+    const now = new Date();
+    return this.dealsModel.find({
+      professionalId: new Types.ObjectId(professionalId),
+      isActive: true,
+      startDate: { $lte: now },
+      endDate: { $gte: now },
+    }).exec();
+  }
+
   async findOne(id: string): Promise<Deals> {
     const deal = await this.dealsModel.findById(id).exec();
-    if (!deal) throw new NotFoundException('Événement non trouvé');
+    if (!deal) throw new NotFoundException('Deal non trouvé');
     return deal;
   }
 
   async update(id: string, updateDealDto: UpdateDealDto): Promise<Deals> {
+    this.logger.log(`📝 Updating deal ${id}`);
+    
+    // Convert string IDs to ObjectIds if present
+    const updateData: any = { ...updateDealDto };
+    if (updateData.applicableMenuItems) {
+      updateData.applicableMenuItems = updateData.applicableMenuItems.map((id: any) => new Types.ObjectId(id));
+    }
+    
     const updated = await this.dealsModel
-      .findByIdAndUpdate(id, updateDealDto, { new: true })
+      .findByIdAndUpdate(id, updateData, { new: true })
       .exec();
-    if (!updated) throw new NotFoundException('Événement non trouvé');
+    if (!updated) throw new NotFoundException('Deal non trouvé');
+    
+    this.logger.log(`✅ Deal updated successfully`);
     return updated;
   }
 
   async remove(id: string): Promise<Deals> {
     const deleted = await this.dealsModel.findByIdAndDelete(id).exec();
-    if (!deleted) throw new NotFoundException('Événement non trouvé');
+    if (!deleted) throw new NotFoundException('Deal non trouvé');
+    
+    this.logger.log(`🗑️ Deal deleted: ${id}`);
     return deleted;
   }
 
@@ -78,7 +113,7 @@ export class DealsService {
   @Cron(CronExpression.EVERY_MINUTE)
   async deleteExpiredDeals() {
     const now = new Date();
-    // Supprime les deals dont la date de fin est passée (< now)
+    
     const result = await this.dealsModel.deleteMany({
       endDate: { $lt: now },
     });

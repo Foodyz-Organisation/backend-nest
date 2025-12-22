@@ -25,7 +25,30 @@ export class CartService {
   async addItem(userId: string, dto: AddToCartDto): Promise<Cart> {
     const cart = await this.getUserCart(userId);
 
-    cart.items.push(dto);
+    // ⭐ Preserve deal information and convert dealId to ObjectId
+    const cartItem: any = {
+      menuItemId: dto.menuItemId,
+      quantity: dto.quantity,
+      name: dto.name,
+      chosenIngredients: dto.chosenIngredients,
+      chosenOptions: dto.chosenOptions,
+      calculatedPrice: dto.calculatedPrice,
+      
+      // ⭐ Deal fields
+      originalPrice: dto.originalPrice,
+      discountPercentage: dto.discountPercentage,
+      dealId: dto.dealId ? new Types.ObjectId(dto.dealId) : undefined
+    };
+
+    console.log('💰 Adding item to cart with deal info:', {
+      name: cartItem.name,
+      originalPrice: cartItem.originalPrice,
+      calculatedPrice: cartItem.calculatedPrice,
+      discountPercentage: cartItem.discountPercentage,
+      dealId: cartItem.dealId
+    });
+
+    cart.items.push(cartItem);
     return cart.save();
   }
 

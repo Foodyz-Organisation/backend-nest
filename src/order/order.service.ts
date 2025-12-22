@@ -295,6 +295,10 @@ async deleteAllOrdersByProfessional(professionalId: string): Promise<void> {
     paymentIntentId: string,
     paymentMethodId?: string,
   ): Promise<{ success: boolean; order?: Order }> {
+    console.log('⚠️ WARNING: Using legacy confirmPayment method');
+    console.log('   This method requires a pre-existing PaymentMethod ID from Stripe');
+    console.log('   💡 Use confirmPaymentWithCardDetails() instead if frontend sends card details');
+    
     try {
       // 1. Get payment from DB
       const payment = await this.paymentService.getPaymentByIntentId(paymentIntentId);
@@ -371,5 +375,123 @@ async deleteAllOrdersByProfessional(professionalId: string): Promise<void> {
       console.error('Error confirming payment:', error);
       throw error;
     }
-}
+  }
+
+  // -----------------------------
+  // ⭐ NEW: CONFIRM CARD PAYMENT WITH CARD DETAILS
+  // This is the CORRECT method that creates PaymentMethod server-side
+  // -----------------------------
+  async confirmPaymentWithCardDetails(
+    paymentIntentId: string,
+    cardDetails: {
+      cardNumber: string;
+      expMonth: number;
+      expYear: number;
+      cvc: string;
+      cardholderName: string;
+    }
+  ): Promise<{ success: boolean; order?: Order }> {
+    try {
+      console.log('🔍 ========== CONFIRM PAYMENT WITH CARD DETAILS ==========');
+      console.log(`📋 PaymentIntent ID: ${paymentIntentId}`);
+      console.log(`💳 Card Holder: ${cardDetails.cardholderName}`);
+      console.log(`📅 Expiry: ${cardDetails.expMonth}/${cardDetails.expYear}`);
+      console.log(`🔒 Card details will be sent to Stripe (NOT stored in DB)`);
+
+      // 1. Get payment from DB
+      const payment = await this.paymentService.getPaymentByIntentId(paymentIntentId);
+      if (!payment) {
+        console.error(`❌ Payment not found for PaymentIntent: ${paymentIntentId}`);
+        throw new NotFoundException('Payment not found');
+      }
+
+      console.log(`✅ Payment found in DB: ${payment._id}`);
+      console.log(`📦 Order ID: ${payment.orderId}`);
+
+      // 2. Confirm payment with Stripe (creates PaymentMethod + confirms)
+      console.log(`🚀 Sending card details to Stripe...`);
+      const stripeResult = await this.stripeService.confirmPaymentWithCardDetails(
+        paymentIntentId,
+        cardDetails.cardNumber,
+        cardDetails.expMonth,
+        cardDetails.expYear,
+        cardDetails.cvc,
+        cardDetails.cardholderName
+      );
+
+      console.log(`✅ Stripe payment confirmed!`);
+      console.log(`📊 Status: ${stripeResult.status}`);
+      console.log(`💳 PaymentMethod ID: ${stripeResult.paymentMethodId}`);
+
+      // 3. Update payment status in DB
+      if (stripeResult.status === 'succeeded') {
+        await this.paymentService.updatePaymentStatus(paymentIntentId, 'succeeded');
+        console.log(`💾 Payment status updated in DB: succeeded`);
+
+        // 4. Get and update order
+        if (payment.orderId) {
+          const order = await this.orderModel.findById(payment.orderId);
+          
+          if (order) {
+            // Update order status to CONFIRMED (payment succeeded)
+            order.status = OrderStatus.CONFIRMED;
+            await order.save();
+            console.log(`📦 Order status updated: ${order.status}`);
+          }
+
+          // 5. Create payment success notification
+          try {
+            await this.notificationService.createOrderNotification(
+              NotificationType.PAYMENT_SUCCESS,
+              order ? String(order.userId) : undefined,
+              undefined,
+              String(payment.orderId),
+              {
+                totalPrice: payment.amount / 100, // Convert from cents
+                paymentMethod: 'CARD',
+              },
+            );
+            console.log(`✅ Payment success notification created`);
+          } catch (error) {
+            console.error('Failed to create payment notification:', error);
+          }
+
+          console.log('✅ ========== PAYMENT CONFIRMATION COMPLETE ==========');
+          return {
+            success: true,
+            order: order || undefined,
+          };
+        }
+
+        return { success: true };
+      } else {
+        // Payment not succeeded
+        await this.paymentService.updatePaymentStatus(paymentIntentId, stripeResult.status);
+        console.log(`⚠️ Payment status: ${stripeResult.status}`);
+        
+        // Create payment failed notification
+        if (payment.orderId) {
+          try {
+            const order = await this.orderModel.findById(payment.orderId);
+            await this.notificationService.createOrderNotification(
+              NotificationType.PAYMENT_FAILED,
+              order ? String(order.userId) : undefined,
+              undefined,
+              String(payment.orderId),
+              {
+                paymentStatus: stripeResult.status,
+              },
+            );
+          } catch (error) {
+            console.error('Failed to create payment failed notification:', error);
+          }
+        }
+        
+        throw new BadRequestException(`Payment status: ${stripeResult.status}`);
+      }
+    } catch (error) {
+      console.error('❌ Error confirming payment:', error);
+      throw error;
+    }
+  }
 }

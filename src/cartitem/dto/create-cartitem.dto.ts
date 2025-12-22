@@ -71,5 +71,17 @@ export class AddToCartDto {
 
   @IsNumber()
   @IsPositive()
-  calculatedPrice: number;
+  calculatedPrice: number; // Price to use (can be discounted or original)
+
+  @IsOptional()
+  @IsNumber()
+  originalPrice?: number; // Original price before discount (if deal is active)
+
+  @IsOptional()
+  @IsNumber()
+  discountPercentage?: number; // Discount percentage applied (if any)
+
+  @IsOptional()
+  @IsMongoId()
+  dealId?: string; // Deal applied to this item (if any)
 }

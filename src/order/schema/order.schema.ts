@@ -40,7 +40,16 @@ export class OrderItem {
   chosenOptions: { name: string; price: number }[];
 
   @Prop({ required: true })
-  calculatedPrice: number; // Final price per item (base + options)
+  calculatedPrice: number; // Final price per item (can be discounted or original)
+
+  @Prop({ required: false })
+  originalPrice?: number; // Original price before discount (if deal was active)
+
+  @Prop({ required: false })
+  discountPercentage?: number; // Discount percentage applied (if any)
+
+  @Prop({ type: Types.ObjectId, ref: 'Deals', required: false })
+  dealId?: Types.ObjectId; // Deal applied to this item at order time (if any)
 }
 
 export const OrderItemSchema = SchemaFactory.createForClass(OrderItem);
