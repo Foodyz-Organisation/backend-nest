@@ -3,6 +3,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ImageAnnotatorClient } from '@google-cloud/vision';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as https from 'https';
+import * as http from 'http';
 
 interface ImageAnalysis {
   labels: string[];
@@ -301,6 +303,53 @@ export class AiValidationService {
   }
 
   /**
+   * Helper: Download image from URL to buffer
+   */
+  private async downloadImage(url: string): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const client = url.startsWith('https') ? https : http;
+      client.get(url, (response) => {
+        if (response.statusCode !== 200) {
+          reject(new Error(`Failed to download image: ${response.statusCode}`));
+          return;
+        }
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk) => chunks.push(chunk));
+        response.on('end', () => resolve(Buffer.concat(chunks)));
+        response.on('error', reject);
+      }).on('error', reject);
+    });
+  }
+
+  /**
+   * Helper: Get image buffer from path or URL
+   */
+  private async getImageBuffer(imagePath: string): Promise<Buffer | null> {
+    try {
+      // If it's a URL, download it
+      if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+        this.logger.log(`📥 Downloading image from URL: ${imagePath}`);
+        return await this.downloadImage(imagePath);
+      }
+      
+      // Otherwise, treat as local file path
+      const filename = imagePath.split('/').pop();
+      if (!filename) return null;
+
+      const fullPath = path.join(process.cwd(), 'uploads', 'reclamations', filename);
+      if (!fs.existsSync(fullPath)) {
+        this.logger.warn(`⚠️ Image introuvable: ${fullPath}`);
+        return null;
+      }
+
+      return fs.readFileSync(fullPath);
+    } catch (error) {
+      this.logger.error(`❌ Error getting image buffer: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
    * 🖼️ Analyse les images avec Google Vision (si disponible)
    */
   private async analyzeImagesWithVision(imagePaths: string[]): Promise<ImageAnalysis> {
@@ -309,18 +358,16 @@ export class AiValidationService {
     let totalQuality = 0;
 
     for (const imagePath of imagePaths) {
-      const filename = imagePath.split('/').pop();
-      if (!filename) continue;
-
-      const fullPath = path.join(process.cwd(), 'uploads', 'reclamations', filename);
-
-      if (!fs.existsSync(fullPath)) {
-        this.logger.warn(`⚠️ Image introuvable: ${fullPath}`);
-        continue;
-      }
-
       try {
-        const [result] = await this.visionClient.labelDetection(fullPath);
+        const imageBuffer = await this.getImageBuffer(imagePath);
+        if (!imageBuffer) {
+          this.logger.warn(`⚠️ Skipping image: ${imagePath}`);
+          continue;
+        }
+
+        const [result] = await this.visionClient.labelDetection({
+          image: { content: imageBuffer },
+        });
         const labels = result.labelAnnotations || [];
 
         labels.forEach(label => {
@@ -349,7 +396,7 @@ export class AiValidationService {
           allIssues.push(...issueLabels);
         }
       } catch (error) {
-        this.logger.error(`❌ Erreur Vision API pour ${filename}:`, error);
+        this.logger.error(`❌ Erreur Vision API pour ${imagePath}:`, error);
       }
     }
 
@@ -378,19 +425,14 @@ export class AiValidationService {
       let totalQuality = 0;
 
       for (const imagePath of imagePaths) {
-        const filename = imagePath.split('/').pop();
-        if (!filename) continue;
-
-        const fullPath = path.join(process.cwd(), 'uploads', 'reclamations', filename);
-
-        if (!fs.existsSync(fullPath)) {
-          this.logger.warn(`⚠️ Image introuvable: ${fullPath}`);
-          continue;
-        }
-
         try {
-          const imageData = fs.readFileSync(fullPath);
-          const base64Image = imageData.toString('base64');
+          const imageBuffer = await this.getImageBuffer(imagePath);
+          if (!imageBuffer) {
+            this.logger.warn(`⚠️ Skipping image: ${imagePath}`);
+            continue;
+          }
+
+          const base64Image = imageBuffer.toString('base64');
 
           const prompt = `
 Analyse cette image de nourriture et réponds en JSON uniquement:
@@ -429,7 +471,7 @@ Détecte: nourriture, plats, problèmes (brûlé, cru, froid, abîmé, sale, etc
           }
 
         } catch (error) {
-          this.logger.error(`❌ Erreur Gemini Vision pour ${filename}:`, error);
+          this.logger.error(`❌ Erreur Gemini Vision pour ${imagePath}:`, error);
           totalQuality += 50; // Score neutre en cas d'erreur
         }
       }

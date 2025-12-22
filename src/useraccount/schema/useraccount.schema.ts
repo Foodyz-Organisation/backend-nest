@@ -84,6 +84,12 @@ export class UserAccount {
 
   @Prop({ type: [String], enum: FoodType, default: [] })
   preferredFoodTypes: FoodType[];
+
+  @Prop({ type: String, enum: FoodType, default: null, required: false })
+  lastInteractedFoodType?: FoodType | null;
+
+  @Prop({ type: Date, default: null, required: false })
+  lastInteractionTimestamp?: Date | null;
 }
 
 export const UserSchema = SchemaFactory.createForClass(UserAccount);

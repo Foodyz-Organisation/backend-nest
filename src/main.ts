@@ -2,12 +2,9 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import * as fs from 'fs';
 import * as os from 'os';
-import * as path from 'path';
 import * as bodyParser from 'body-parser';
 import * as express from 'express';
-import { join } from 'path';
 import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
@@ -24,26 +21,6 @@ async function bootstrap() {
     allowedHeaders: 'Content-Type, Accept, Authorization, x-user-id, x-owner-type',
   });
 
-  // ===== Vérification des dossiers =====
-  const uploadsPath = path.join(__dirname, '..', 'uploads');
-  console.log('📁 Chemin uploads absolu:', uploadsPath);
-
-  if (!fs.existsSync(uploadsPath)) {
-    console.warn('⚠️ Le dossier uploads n\'existe pas ! Création...');
-    fs.mkdirSync(uploadsPath, { recursive: true });
-  } else {
-    console.log('✅ Dossier uploads existe');
-  }
-
-  const reclamationsPath = path.join(uploadsPath, 'reclamations');
-  if (fs.existsSync(reclamationsPath)) {
-    const files = fs.readdirSync(reclamationsPath);
-    console.log(`📸 ${files.length} fichier(s) dans uploads/reclamations`);
-  } else {
-    console.warn('⚠️ Le dossier uploads/reclamations n\'existe pas !');
-    fs.mkdirSync(reclamationsPath, { recursive: true });
-  }
-
   // ===== Global Validation =====
   app.useGlobalPipes(
     new ValidationPipe({
@@ -52,9 +29,6 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
-
-  // ===== Serve Uploaded Images =====
-  app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
 
   // ===== Swagger Configuration =====
   const swaggerConfig = new DocumentBuilder()
@@ -104,9 +78,8 @@ async function bootstrap() {
   console.log(`   📱 Emulator: http://10.0.2.2:${port}`);
   console.log(`📘 Swagger: http://${localIP}:${port}/api`);
   console.log('');
-  console.log(`📸 Test images:`);
-  console.log(`   http://${localIP}:${port}/uploads-test`);
-  console.log(`   http://${localIP}:${port}/uploads/reclamations/1764421570644-0-110156091.png`);
+  console.log(`📸 File Storage: Supabase Storage`);
+  console.log(`   All files are served from Supabase Storage URLs`);
   console.log('='.repeat(60));
 
   // ===== Start Server on ALL interfaces (0.0.0.0) =====

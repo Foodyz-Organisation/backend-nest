@@ -20,32 +20,12 @@ import { Like, LikeDocument } from './schemas/like.schema';
 import { execSync } from 'child_process';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../notification/schema/notification.schema';
+import { InteractionService } from './interaction.service';
 
 type MulterFile = Express.Multer.File;
 
 
-let ffprobePath: string;
-try {
-  ffprobePath = execSync('which ffprobe', { encoding: 'utf-8' }).trim();
-  ffmpeg.setFfprobePath(ffprobePath);
-  console.log(`✅ FFprobe found at: ${ffprobePath}`);
-} catch (error) {
-  console.error('❌ FFprobe not found in PATH');
-  // Fallback to common locations
-  ffmpeg.setFfprobePath('/opt/homebrew/bin/ffprobe'); // macOS Homebrew
-}
 
-// Same for ffmpeg
-let ffmpegPath: string;
-try {
-  ffmpegPath = execSync('which ffmpeg', { encoding: 'utf-8' }).trim();
-  ffmpeg.setFfmpegPath(ffmpegPath);
-  console.log(`✅ FFmpeg found at: ${ffmpegPath}`);
-} catch (error) {
-  console.error('❌ FFmpeg not found in PATH');
-  ffmpeg.setFfmpegPath('/opt/homebrew/bin/ffmpeg'); // macOS Homebrew
-}
-// ===== End FFmpeg Configuration =====
 
 
 @Injectable()
@@ -61,6 +41,7 @@ export class PostsService {
     @InjectModel(Like.name) private readonly likeModel: Model<LikeDocument>,   // <-- NEW
     @InjectModel(Save.name) private readonly saveModel: Model<SaveDocument>,
     private notificationService: NotificationService,
+    private interactionService: InteractionService,
   ) {}
 
   /**
@@ -149,47 +130,91 @@ export class PostsService {
 
   async findAll(userId?: Types.ObjectId): Promise<PostDocument[]> {
     let posts: PostDocument[] = [];
+    const totalLimit = 50; // Total posts to return
 
     // If userId is provided, check for personalized feed
     if (userId) {
       const user = await this.userModel.findById(userId).exec();
       
       if (user && user.preferredFoodTypes && user.preferredFoodTypes.length > 0) {
-        // Personalized feed: 70% preferred, 30% general
-        const totalLimit = 50; // Total posts to return
-        const preferredLimit = Math.ceil(totalLimit * 0.7);
-        const generalLimit = Math.floor(totalLimit * 0.3);
+        // Check if user has a recent interaction (lastInteractedFoodType)
+        if (user.lastInteractedFoodType) {
+          // New prioritization: 50% lastInteractedFoodType, 20% other preferredFoodTypes, 30% general
+          const lastInteractedLimit = Math.floor(totalLimit * 0.5); // 50% = 25 posts
+          const otherPreferredLimit = Math.floor(totalLimit * 0.2); // 20% = 10 posts
+          const generalLimit = totalLimit - lastInteractedLimit - otherPreferredLimit; // 30% = 15 posts
 
-        // Fetch preferred posts (70%)
-        const preferredPosts = await this.postModel.find({
-          foodType: { $in: user.preferredFoodTypes }
-        })
-          .sort({ createdAt: -1 })
-          .limit(preferredLimit)
-          .exec();
+          // Get other preferred food types (excluding lastInteractedFoodType to avoid duplication)
+          const otherPreferredFoodTypes = user.preferredFoodTypes.filter(
+            (ft) => ft !== user.lastInteractedFoodType
+          );
 
-        // Fetch general posts (30%) - posts NOT in preferredFoodTypes
-        const generalPosts = await this.postModel.find({
-          foodType: { $nin: user.preferredFoodTypes }
-        })
-          .sort({ createdAt: -1 })
-          .limit(generalLimit)
-          .exec();
+          // 1. Fetch posts matching lastInteractedFoodType (50%)
+          const lastInteractedPosts = await this.postModel.find({
+            foodType: user.lastInteractedFoodType,
+          })
+            .sort({ createdAt: -1 })
+            .limit(lastInteractedLimit)
+            .exec();
 
-        // Merge: preferred first, then general
-        posts = [...preferredPosts, ...generalPosts];
+          // 2. Fetch posts from other preferredFoodTypes (20%) - only if there are other preferred types
+          let otherPreferredPosts: PostDocument[] = [];
+          if (otherPreferredFoodTypes.length > 0) {
+            otherPreferredPosts = await this.postModel.find({
+              foodType: { $in: otherPreferredFoodTypes },
+            })
+              .sort({ createdAt: -1 })
+              .limit(otherPreferredLimit)
+              .exec();
+          }
+
+          // 3. Fetch general posts (30%) - posts NOT in any preferredFoodTypes
+          const allPreferredTypes = [...new Set([...user.preferredFoodTypes])]; // Ensure no duplicates
+          const generalPosts = await this.postModel.find({
+            foodType: { $nin: allPreferredTypes },
+          })
+            .sort({ createdAt: -1 })
+            .limit(generalLimit)
+            .exec();
+
+          // Merge: lastInteracted first, then other preferred, then general
+          posts = [...lastInteractedPosts, ...otherPreferredPosts, ...generalPosts];
+        } else {
+          // Fallback to old logic: 70% preferred, 30% general (when no recent interaction)
+          const preferredLimit = Math.ceil(totalLimit * 0.7);
+          const generalLimit = Math.floor(totalLimit * 0.3);
+
+          // Fetch preferred posts (70%)
+          const preferredPosts = await this.postModel.find({
+            foodType: { $in: user.preferredFoodTypes },
+          })
+            .sort({ createdAt: -1 })
+            .limit(preferredLimit)
+            .exec();
+
+          // Fetch general posts (30%) - posts NOT in preferredFoodTypes
+          const generalPosts = await this.postModel.find({
+            foodType: { $nin: user.preferredFoodTypes },
+          })
+            .sort({ createdAt: -1 })
+            .limit(generalLimit)
+            .exec();
+
+          // Merge: preferred first, then general
+          posts = [...preferredPosts, ...generalPosts];
+        }
       } else {
         // User has no preferences, return general feed
         posts = await this.postModel.find()
           .sort({ createdAt: -1 })
-          .limit(50)
+          .limit(totalLimit)
           .exec();
       }
     } else {
       // No userId provided, return general feed
       posts = await this.postModel.find()
         .sort({ createdAt: -1 })
-        .limit(50)
+        .limit(totalLimit)
         .exec();
     }
 
@@ -203,11 +228,20 @@ export class PostsService {
     return posts as PostDocument[];
   }
 
-async findOne(id: string): Promise<PostDocument>  {
+async findOne(id: string, userId?: Types.ObjectId): Promise<PostDocument>  {
     // 1. Fetch the post and populate its owner
     const post = await this.postModel.findById(id).exec();
     if (!post) {
       throw new NotFoundException(`Post with ID "${id}" not found.`);
+    }
+
+    // Track view interaction if userId is provided (non-blocking)
+    if (userId) {
+      this.interactionService.updateUserPreferenceFromInteraction(userId, new Types.ObjectId(id)).catch(
+        (error) => {
+          console.error('Failed to update preference from view:', error);
+        }
+      );
     }
 
     await post.populate({
@@ -268,39 +302,6 @@ async findOne(id: string): Promise<PostDocument>  {
     return Object.values(FoodType);
   }
 
-  async preferFoodType(postId: Types.ObjectId, userId: Types.ObjectId): Promise<UserDocument> {
-    // 1. Find the post by postId
-    const post = await this.postModel.findById(postId).exec();
-    if (!post) {
-      throw new NotFoundException(`Post with ID "${postId}" not found.`);
-    }
-
-    // 2. Extract the foodType from the found post
-    const foodType = post.foodType;
-    if (!foodType) {
-      throw new BadRequestException('Post does not have a food type.');
-    }
-
-    // 3. Find the UserAccount by userId
-    const user = await this.userModel.findById(userId).exec();
-    if (!user) {
-      throw new NotFoundException(`User with ID "${userId}" not found.`);
-    }
-
-    // 4. Check if the post's foodType is already in the user's preferredFoodTypes array
-    if (!user.preferredFoodTypes) {
-      user.preferredFoodTypes = [];
-    }
-
-    // 5. If not present, add the foodType to the user's preferredFoodTypes array
-    if (!user.preferredFoodTypes.includes(foodType as FoodType)) {
-      user.preferredFoodTypes.push(foodType as FoodType);
-      await user.save();
-    }
-
-    // 6. Return the updated UserAccount
-    return user;
-  }
 
 
 async update(
@@ -511,6 +512,13 @@ async getReelsFeed(
       post.likeCount += 1;
       await post.save();
 
+      // Update user preference from interaction (non-blocking)
+      this.interactionService.updateUserPreferenceFromInteraction(userId, postId).catch(
+        (error) => {
+          console.error('Failed to update preference from like:', error);
+        }
+      );
+
      const updatedPost = await this.postModel.findById(postId).exec(); // Exec without populate
 
       if (!updatedPost) {
@@ -565,6 +573,13 @@ async getReelsFeed(
       await this.saveModel.create({ postId, userId });
       post.saveCount += 1;
       await post.save();
+
+      // Update user preference from interaction (non-blocking)
+      this.interactionService.updateUserPreferenceFromInteraction(userId, postId).catch(
+        (error) => {
+          console.error('Failed to update preference from save:', error);
+        }
+      );
 
       const updatedPost = await this.postModel.findById(postId).exec(); // Exec without populate
 
@@ -656,6 +671,13 @@ async createComment(
 
     post.commentCount += 1;
     await post.save();
+
+    // Update user preference from interaction (non-blocking)
+    this.interactionService.updateUserPreferenceFromInteraction(userId, postId).catch(
+      (error) => {
+        console.error('Failed to update preference from comment:', error);
+      }
+    );
 
     // Populate the userId of the new comment before returning
     await savedComment.populate({

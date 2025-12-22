@@ -217,36 +217,6 @@ export class PostsController {
     return this.postsService.findByFoodType(foodType);
   }
 
-  // --- Prefer Food Type (for normal users) --- (More specific path segment than :id)
-  @Post(':postId/prefer-foodtype')
-  @ApiOperation({ 
-    summary: 'Add a post\'s food type to user preferences',
-    description: 'When a normal user interacts with a post, this endpoint adds the post\'s food type to their preferredFoodTypes array for personalized feed recommendations.'
-  })
-  @ApiResponse({ status: 200, description: 'Food type added to user preferences successfully' })
-  @ApiResponse({ status: 400, description: 'Bad request (invalid IDs or post has no food type)' })
-  @ApiResponse({ status: 404, description: 'Post or user not found' })
-  @ApiHeader({
-    name: 'x-user-id',
-    description: 'The ID of the normal user (UserAccount) adding the food type preference',
-    required: true,
-  })
-  async preferFoodType(
-    @Param('postId') postId: string,
-    @Headers('x-user-id') userId: string,
-  ) {
-    if (!userId) {
-      throw new BadRequestException('x-user-id header is required.');
-    }
-    if (!Types.ObjectId.isValid(postId)) {
-      throw new BadRequestException('Invalid post ID format.');
-    }
-    if (!Types.ObjectId.isValid(userId)) {
-      throw new BadRequestException('Invalid user ID format.');
-    }
-    return this.postsService.preferFoodType(new Types.ObjectId(postId), new Types.ObjectId(userId));
-  }
-
   // --- Get Saved Posts (for normal users only) --- (More specific path segment than :id)
   @Get('saved')
   @ApiOperation({ summary: 'Get all saved posts for a normal user' })
@@ -288,15 +258,28 @@ export class PostsController {
 
   // --- Get a Single Post by ID --- (Most general GET with dynamic parameter)
   @Get(':id')
-  @ApiOperation({ summary: 'Retrieve a single post by ID' })
+  @ApiOperation({ 
+    summary: 'Retrieve a single post by ID',
+    description: 'Returns a single post with all details. If x-user-id header is provided, the view is tracked for preference learning.'
+  })
   @ApiResponse({ status: 200, description: 'The post found', type: PostSchema })
   @ApiResponse({ status: 404, description: 'Post not found' })
-  async findOne(@Param('id') id: string) {
+  @ApiHeader({
+    name: 'x-user-id',
+    description: 'Optional: The ID of the user viewing the post (for preference tracking)',
+    required: false,
+  })
+  async findOne(
+    @Param('id') id: string,
+    @Headers('x-user-id') userId?: string,
+  ) {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Invalid post ID format.');
     }
-    // No need to convert to ObjectId here as findOne in service accepts string
-    return this.postsService.findOne(id);
+    const userIdObject = userId && Types.ObjectId.isValid(userId) 
+      ? new Types.ObjectId(userId) 
+      : undefined;
+    return this.postsService.findOne(id, userIdObject);
   }
 
   // =======================================================================

@@ -4,9 +4,9 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class UploadResponseDto {
   @ApiProperty({
-    description: 'An array of URLs for the successfully uploaded media files.',
+    description: 'An array of URLs for the successfully uploaded media files. These are full Supabase Storage URLs.',
     type: [String],
-    example: ['http://localhost:3000/uploads/16788812345-randomhash1.jpg', 'http://localhost:3000/uploads/16788812345-randomhash2.mp4'],
+    example: ['https://bhfpudsrynnsxzazmcjd.supabase.co/storage/v1/object/public/uploads/posts/16788812345-randomhash1.jpg', 'https://bhfpudsrynnsxzazmcjd.supabase.co/storage/v1/object/public/uploads/posts/16788812345-randomhash2.mp4'],
   })
   @IsArray()
   @ArrayNotEmpty({ message: 'The uploaded file URLs array cannot be empty.' })

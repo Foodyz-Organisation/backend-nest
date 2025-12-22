@@ -13,6 +13,7 @@ import { ProfessionalAccount, ProfessionalSchema } from 'src/professionalaccount
 import { Like, LikeSchema } from './schemas/like.schema'; // <-- NEW
 import { Save, SaveSchema } from './schemas/save.schema'; // <-- NEW
 import { NotificationModule } from '../notification/notification.module';
+import { InteractionService } from './interaction.service';
 
 
 @Module({
@@ -28,7 +29,7 @@ import { NotificationModule } from '../notification/notification.module';
     NotificationModule,
   ],
   controllers: [PostsController],
-  providers: [PostsService],
+  providers: [PostsService, InteractionService],
   // If you later need PostsService or Post/Comment models in other modules,
   // you might need to add `exports: [PostsService, MongooseModule.forFeature([...])]`
 })

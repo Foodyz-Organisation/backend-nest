@@ -17,6 +17,7 @@ import { plainToInstance } from 'class-transformer';
 import { MenuItemService } from './menuitem.service';
 import { ImageUploadService } from './imageuploadservice';
 import { MenuItem } from './schema/menuitem.schema';
+import { SupabaseStorageService } from '../common/services/supabase-storage.service';
 import { CreateMenuItemDto } from './dto/create-menuitem.dto';
 import { UpdateMenuItemDto } from './dto/update-menuitem.dto';
 import { Category } from './schema/menu-category.enum';
@@ -30,7 +31,10 @@ type MenuByCategory = {
 @Controller('menu-items')
 @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
 export class MenuItemController {
-  constructor(private readonly menuItemService: MenuItemService) {}
+  constructor(
+    private readonly menuItemService: MenuItemService,
+    private readonly supabaseStorageService: SupabaseStorageService,
+  ) {}
 
   // =================================================================
   // 1. POST: Create New Menu Item (with file upload)
@@ -55,7 +59,8 @@ export class MenuItemController {
       throw new BadRequestException('The DTO payload is not valid JSON.');
     }
     if (file) {
-      createMenuItemDto.image = `uploads/${file.filename}`;
+      const imageUrl = await this.supabaseStorageService.uploadFile(file, 'menu-items');
+      createMenuItemDto.image = imageUrl;
     } else {
       console.warn('No file received by Multer!');
     }
@@ -106,7 +111,8 @@ export class MenuItemController {
       throw new BadRequestException('The DTO payload is not valid JSON.');
     }
     if (file) {
-      updateMenuItemDto.image = `uploads/${file.filename}`;
+      const imageUrl = await this.supabaseStorageService.uploadFile(file, 'menu-items');
+      updateMenuItemDto.image = imageUrl;
     } else {
       throw new BadRequestException('Image file is required for this endpoint');
     }
