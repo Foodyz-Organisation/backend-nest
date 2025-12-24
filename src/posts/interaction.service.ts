@@ -13,17 +13,6 @@ export class InteractionService {
     @InjectModel(UserAccount.name) private readonly userModel: Model<UserDocument>,
   ) {}
 
-  /**
-   * Updates user preference from interaction with a post
-   * This method:
-   * 1. Extracts the foodType from the post
-   * 2. Adds it to user's preferredFoodTypes if not already present (implicit collection)
-   * 3. Updates lastInteractedFoodType and lastInteractionTimestamp
-   * 4. Saves the user account
-   * 
-   * This method is designed to be non-blocking - errors are logged but don't throw
-   * to prevent failures in the main interaction flow (like, comment, save, view)
-   */
   async updateUserPreferenceFromInteraction(
     userId: Types.ObjectId,
     postId: Types.ObjectId,

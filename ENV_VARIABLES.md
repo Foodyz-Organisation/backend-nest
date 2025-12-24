@@ -83,3 +83,4 @@ GRADIO_API_URL=http://127.0.0.1:7860
 - The `SUPABASE_SERVICE_KEY` is sensitive - keep it secret
 - For production, use environment variables in your hosting platform (Render, etc.)
 
+

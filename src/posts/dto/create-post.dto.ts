@@ -47,10 +47,10 @@ export class CreatePostDto {
   @ApiProperty({
     description: 'The type of food in the post. Must be one of the predefined food types.',
     enum: FoodType,
-    example: FoodType.SPICY,
+    example: FoodType.BURGER,
   })
   @IsEnum(FoodType, { 
-    message: 'Food type must be one of: Spicy, Healthy, Mashwi, Couscous, Street food, Fast food, Seafood, Fried, Desserts, Vegetarian-Friendly, Meat.' 
+    message: 'Food type must be one of: BURGER, PIZZA, PASTA, MEXICAN, SUSHI, ASIAN, INDIAN, MIDEAST, SEAFOOD, CHICKEN, SANDWICHES, SOUPS, SALAD, VEGETARIAN, VEGAN, HEALTHY, GLUTEN_FREE, SPICY, BREAKFAST, DESSERT, DRINKS, KIDS_MENU, FAMILY_MEAL.' 
   })
   foodType: FoodType;
 

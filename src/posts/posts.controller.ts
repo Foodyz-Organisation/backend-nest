@@ -27,8 +27,7 @@ import {
   ApiQuery, // Make sure ApiQuery is imported
 } from '@nestjs/swagger';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { memoryStorage } from 'multer';
 import { PostDocument, Post as PostSchema, FoodType } from './schemas/post.schema';
 // import { MulterFile } from '../common/types/multer-file.type'; // Removed as Express.Multer.File is used directly
 import { UploadResponseDto } from './dto/upload-response.dto';
@@ -65,14 +64,7 @@ export class PostsController {
   @ApiResponse({ status: 400, description: 'Bad request (e.g., invalid file type or size)' })
   @UseInterceptors(
     FilesInterceptor('files', 10, {
-      storage: diskStorage({
-        destination: './uploads',
-        filename: (req, file, cb) => {
-          const randomName = Array(32).fill(null).map(() => (Math.round(Math.random() * 16)).toString(16)).join('');
-          const timestamp = Date.now();
-          cb(null, `${timestamp}-${randomName}${extname(file.originalname)}`);
-        },
-      }),
+      storage: memoryStorage(),
       fileFilter: (req, file, cb) => {
         if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|mp4|mov|avi|wmv)$/)) {
           return cb(new BadRequestException('Only image and video files are allowed!'), false);
@@ -209,7 +201,7 @@ export class PostsController {
   @Get('by-food-type/:foodType')
   @ApiOperation({ 
     summary: 'Retrieve all posts filtered by food type',
-    description: 'Returns all posts that match the specified food type. Valid food types: Spicy, Healthy, Mashwi, Couscous, Street food, Fast food, Seafood, Fried, Desserts, Vegetarian-Friendly, Meat'
+    description: 'Returns all posts that match the specified food type. Valid food types: BURGER, PIZZA, PASTA, MEXICAN, SUSHI, ASIAN, INDIAN, MIDEAST, SEAFOOD, CHICKEN, SANDWICHES, SOUPS, SALAD, VEGETARIAN, VEGAN, HEALTHY, GLUTEN_FREE, SPICY, BREAKFAST, DESSERT, DRINKS, KIDS_MENU, FAMILY_MEAL'
   })
   @ApiResponse({ status: 200, description: 'List of posts filtered by food type', type: [PostSchema] })
   @ApiResponse({ status: 400, description: 'Invalid food type' })

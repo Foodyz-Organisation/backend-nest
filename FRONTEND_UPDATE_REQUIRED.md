@@ -309,3 +309,4 @@ If you encounter issues:
 
 **Summary**: The main change is that image URLs are now full Supabase URLs that can be used directly, eliminating the need for URL construction on the frontend.
 
+

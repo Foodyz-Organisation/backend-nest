@@ -19,7 +19,6 @@ export class UserAccount {
   @Prop({ required: false, default: '' }) // Short description for the profile
   bio: string;
 
-  // Interaction counts for profile
   @Prop({ type: Number, default: 0 })
   followerCount: number;
 
@@ -56,7 +55,6 @@ export class UserAccount {
   @Prop()
   avatarUrl?: string;
 
-  // ✅ NOUVEAU : Système de points de fidélité
   @Prop({ default: 0 })
   loyaltyPoints: number;
 
@@ -66,7 +64,7 @@ export class UserAccount {
   @Prop({ default: 0 })
   invalidReclamationsCount: number;
 
-  @Prop({ default: 100 }) // Score de fiabilité sur 100
+  @Prop({ default: 100 }) 
   reliabilityScore: number;
 
   @Prop({ type: [{ 
