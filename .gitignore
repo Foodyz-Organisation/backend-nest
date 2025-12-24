@@ -56,6 +56,7 @@ google-oauth*.json
 oauth2-credentials*.json
 client_secret*.json
 service-account*.json
+src/auth/OAuth2Client.ts
 
 # Any credentials or secrets files
 *credentials*.json
@@ -81,3 +82,10 @@ pids
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Firebase / Google guide files
+FIREBASE_CONFIGURATION_GUIDE.md
+FIREBASE_PUSH_NOTIFICATIONS_SETUP.md
+FIREBASE_SETUP_COMPLETE.md
+FIREBASE_SETUP_INSTRUCTIONS.md
+GOOGLE_AUTH_IMPLEMENTATION.md*.md

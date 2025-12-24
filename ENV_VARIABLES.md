@@ -28,6 +28,12 @@ GEMINI_API_KEY=your-gemini-api-key
 
 ## Optional Variables
 
+### Google OAuth (Optional - for Google Sign-In)
+```env
+GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+```
+Note: If not provided, the default client ID will be used. It's recommended to set this in production.
+
 ### Google Vision API (Optional - for enhanced image analysis)
 ```env
 GOOGLE_APPLICATION_CREDENTIALS=/path/to/google-credentials.json
@@ -68,6 +74,32 @@ SPAM_API_URL=http://localhost:8000
 BAD_WORDS_MODE=both
 GRADIO_API_URL=http://127.0.0.1:7860
 ```
+
+### Firebase Cloud Messaging (Optional - for Push Notifications)
+**Option 1: Service Account JSON File Path**
+```env
+FIREBASE_SERVICE_ACCOUNT_PATH=/path/to/firebase-service-account.json
+```
+
+**Option 2: Service Account JSON as Environment Variable**
+```env
+FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"your-project-id",...}
+```
+
+**Option 3: Individual Credentials**
+```env
+FIREBASE_PROJECT_ID=your-firebase-project-id
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-project.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYourPrivateKeyHere\n-----END PRIVATE KEY-----\n"
+```
+
+**Note:** 
+- You only need to provide ONE of the three options above
+- To get Firebase credentials:
+  1. Go to Firebase Console → Project Settings → Service Accounts
+  2. Click "Generate New Private Key" to download the JSON file
+  3. Use Option 1 (file path) or Option 2 (JSON string) or Option 3 (individual fields)
+- If Firebase is not configured, push notifications will be skipped (notifications will still be saved to database)
 
 ## Setup Instructions
 
