@@ -9,6 +9,7 @@ import { ProfessionalAccount, ProfessionalDocument } from '../professionalaccoun
 import { SignupDto } from './dto/Signup.dto';
 import { ProfessionalSignupDto } from './dto/ProfessionalSignup.dto';
 import { LoginDto } from './dto/Login.dto';
+import { verifyGoogleToken } from './OAuth2Client';
 import * as crypto from 'crypto';
 import * as nodemailer from 'nodemailer';
 
@@ -160,6 +161,158 @@ export class AuthService {
   };
 }
 
+
+  // ================= Google Login =================
+  async googleLogin(idToken: string) {
+    try {
+      console.log('🔐 Google login attempt');
+      
+      // Verify the Google ID token
+      const googlePayload = await verifyGoogleToken(idToken);
+      
+      if (!googlePayload || !googlePayload.email) {
+        console.log('❌ Invalid Google token payload');
+        throw new UnauthorizedException('Invalid Google token');
+      }
+
+      const email = googlePayload.email.toLowerCase().trim();
+      const name = googlePayload.name || googlePayload.given_name || '';
+      const picture = googlePayload.picture || '';
+      
+      console.log('✅ Google token verified for:', email);
+      console.log('📸 Profile picture URL:', picture);
+      console.log('👤 Full name from Google:', name);
+
+      // Check if user exists
+      let account: UserDocument | ProfessionalDocument | null =
+        await this.userModel.findOne({ email }).exec();
+      let role: 'user' | 'professional' = 'user';
+
+      if (!account) {
+        account = await this.profModel.findOne({ email }).exec();
+        role = 'professional';
+      }
+
+      // If user doesn't exist, create a new user account (REGISTRATION)
+      if (!account) {
+        console.log('📝 Creating new user account for Google login:', email);
+        
+        // Generate a random password (users won't need it for Google login)
+        const randomPassword = crypto.randomBytes(32).toString('hex');
+        const hashedPassword = await bcrypt.hash(randomPassword, 10);
+        
+        // Generate username from email or name
+        const username = name 
+          ? name.toLowerCase().replace(/\s+/g, '_') + '_' + crypto.randomInt(1000, 9999)
+          : email.split('@')[0] + '_' + crypto.randomInt(1000, 9999);
+
+        // Create new user account with Google profile data
+        // Note: phone and address are required fields, using placeholder values
+        // Users should update these after Google signup
+        const newUser = new this.userModel({
+          username,
+          fullName: name || email.split('@')[0],
+          email,
+          password: hashedPassword,
+          phone: `google_${crypto.randomBytes(8).toString('hex')}`, // Placeholder, user should update
+          address: 'Not provided', // Placeholder, user should update
+          profilePictureUrl: picture, // Save Google profile picture
+          role: 'user',
+          isActive: true,
+        });
+
+        account = await newUser.save();
+        role = 'user';
+        console.log('✅ New user account created with Google profile:', email);
+        console.log('📸 Profile picture saved:', picture);
+      } else {
+        // User exists - LOGIN flow
+        console.log('🔐 Existing user login with Google:', email);
+        let updated = false;
+
+        // Update profile picture if available and different
+        if (picture && account.profilePictureUrl !== picture) {
+          account.profilePictureUrl = picture;
+          updated = true;
+          console.log('📸 Profile picture updated from Google');
+        }
+
+        // Update fullName if available and different (for user accounts)
+        // Helper function to check if account is a user account
+        const checkIsUserAccount = (acc: UserDocument | ProfessionalDocument): acc is UserDocument => {
+          return 'username' in acc || 'nomPrenom' in acc;
+        };
+
+        if (checkIsUserAccount(account) && name && account.fullName !== name) {
+          account.fullName = name;
+          updated = true;
+          console.log('👤 Full name updated from Google');
+        }
+
+        // Save updates if any
+        if (updated) {
+          await account.save();
+          console.log('✅ User profile updated with Google data');
+        }
+      }
+
+      // Check if account is active
+      if (!account.isActive) {
+        console.log('❌ Account deactivated:', email);
+        throw new UnauthorizedException('Account is deactivated');
+      }
+
+      // Extract username
+      const isUserAccount = (acc: UserDocument | ProfessionalDocument): acc is UserDocument => {
+        return 'username' in acc || 'nomPrenom' in acc;
+      };
+
+      let username: string;
+      if (isUserAccount(account)) {
+        username = account.fullName || account.username || email.split('@')[0];
+      } else {
+        username =
+          account.professionalData?.fullName ||
+          account.fullName ||
+          email.split('@')[0];
+      }
+
+      // Generate JWT tokens
+      const accountId = String(account._id);
+      const payload = {
+        sub: accountId,
+        email: account.email,
+        role,
+        username,
+      };
+
+      console.log('🔐 JWT Payload:', payload);
+
+      const access_token = this.jwtService.sign(payload, { expiresIn: '24h' });
+      const refresh_token = this.jwtService.sign(payload, { expiresIn: '7d' });
+
+      console.log('✅ Google login successful for:', email);
+
+      return {
+        access_token,
+        refresh_token,
+        role,
+        email: account.email,
+        id: accountId,
+        username,
+        profilePictureUrl: account.profilePictureUrl || picture, // Return profile picture URL
+        fullName: isUserAccount(account) 
+          ? (account.fullName || name) 
+          : (account.fullName || account.professionalData?.fullName || name),
+      };
+    } catch (error) {
+      console.error('❌ Google login error:', error);
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      throw new UnauthorizedException('Google authentication failed');
+    }
+  }
 
   // ================= Refresh Token ================= ✅ CORRIGÉ
   async refreshToken(refreshToken: string) {

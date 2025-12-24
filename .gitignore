@@ -42,6 +42,33 @@ lerna-debug.log*
 .env.production.local
 .env.local
 
+# ========================================
+# 🔐 SENSITIVE CREDENTIALS - DO NOT COMMIT
+# ========================================
+
+# Firebase service account (contains sensitive credentials)
+firebase-service-account.json
+*firebase-service-account*.json
+firebase-adminsdk*.json
+
+# Google OAuth2 credentials
+google-oauth*.json
+oauth2-credentials*.json
+client_secret*.json
+service-account*.json
+
+# Any credentials or secrets files
+*credentials*.json
+*secrets*.json
+*secret*.json
+*.pem
+*.key
+*.p12
+
+# API keys and tokens
+*api-key*.json
+*api-keys*.json
+
 # temp directory
 .temp
 .tmp

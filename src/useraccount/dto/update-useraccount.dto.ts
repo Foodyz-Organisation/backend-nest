@@ -36,4 +36,9 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   profilePictureUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Firebase Cloud Messaging token for push notifications' })
+  @IsOptional()
+  @IsString()
+  fcmToken?: string;
 }

@@ -88,6 +88,9 @@ export class UserAccount {
 
   @Prop({ type: Date, default: null, required: false })
   lastInteractionTimestamp?: Date | null;
+
+  @Prop({ required: false })
+  fcmToken?: string; // Firebase Cloud Messaging token for push notifications
 }
 
 export const UserSchema = SchemaFactory.createForClass(UserAccount);

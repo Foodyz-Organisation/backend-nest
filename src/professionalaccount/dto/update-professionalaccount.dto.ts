@@ -82,4 +82,9 @@ export class UpdateProfessionalDto {
   @IsString()
   profilePictureUrl?: string;
 
+  @ApiProperty({ description: 'Firebase Cloud Messaging token for push notifications', required: false })
+  @IsOptional()
+  @IsString()
+  fcmToken?: string;
+
 }

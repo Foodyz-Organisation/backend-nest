@@ -14,7 +14,7 @@ export class ProfessionalService {
   constructor(
     @InjectModel(ProfessionalAccount.name)
     private profModel: Model<ProfessionalDocument>
-  ) {}
+  ) { }
 
   // =============================
   // CREATE
@@ -30,19 +30,19 @@ export class ProfessionalService {
         path: p
       })) || [];
 
-const created = new this.profModel({
-  email: createDto.email,
-  password: hashed,
-  fullName: createDto.fullName || '',
-  licenseNumber: createDto.licenseNumber || '',
-  documents: createDto.documents || [], // just strings
-  role: 'professional',
-  isActive: true,
-  linkedUserId: createDto.linkedUserId
-    ? new Types.ObjectId(createDto.linkedUserId)
-    : undefined,
-  locations: createDto.locations || [], // Ensure locations array is set
-});
+    const created = new this.profModel({
+      email: createDto.email,
+      password: hashed,
+      fullName: createDto.fullName || '',
+      licenseNumber: createDto.licenseNumber || '',
+      documents: createDto.documents || [], // just strings
+      role: 'professional',
+      isActive: true,
+      linkedUserId: createDto.linkedUserId
+        ? new Types.ObjectId(createDto.linkedUserId)
+        : undefined,
+      locations: createDto.locations || [], // Ensure locations array is set
+    });
 
     return created.save();
   }
@@ -81,57 +81,61 @@ const created = new this.profModel({
       .exec();
   }
 
-// =============================
-// UPDATE
-// =============================
-async update(
-  id: string,
-  updateDto: UpdateProfessionalDto
-): Promise<ProfessionalAccount> {
-  const prof = await this.profModel.findById(id).exec();
-  if (!prof) throw new NotFoundException('Professional not found');
+  // =============================
+  // UPDATE
+  // =============================
+  async update(
+    id: string,
+    updateDto: UpdateProfessionalDto
+  ): Promise<ProfessionalAccount> {
+    const prof = await this.profModel.findById(id).exec();
+    if (!prof) throw new NotFoundException('Professional not found');
 
-  if (updateDto.password)
-    prof.password = await bcrypt.hash(updateDto.password, 10);
+    if (updateDto.password)
+      prof.password = await bcrypt.hash(updateDto.password, 10);
 
-  if (updateDto.fullName !== undefined)
-    prof.fullName = updateDto.fullName;
+    if (updateDto.fullName !== undefined)
+      prof.fullName = updateDto.fullName;
 
-  if (updateDto.licenseNumber !== undefined)
-    prof.licenseNumber = updateDto.licenseNumber;
+    if (updateDto.licenseNumber !== undefined)
+      prof.licenseNumber = updateDto.licenseNumber;
 
-  if (updateDto.description !== undefined)
-    prof.description = updateDto.description;
+    if (updateDto.description !== undefined)
+      prof.description = updateDto.description;
 
-  if (updateDto.address !== undefined)
-    prof.address = updateDto.address;
+    if (updateDto.address !== undefined)
+      prof.address = updateDto.address;
 
-  if (updateDto.phone !== undefined)
-    prof.phone = updateDto.phone;
+    if (updateDto.phone !== undefined)
+      prof.phone = updateDto.phone;
 
-  if (updateDto.hours !== undefined)
-    prof.hours = updateDto.hours;
+    if (updateDto.hours !== undefined)
+      prof.hours = updateDto.hours;
 
-  if (updateDto.services !== undefined)
-    prof.services = { ...prof.services, ...updateDto.services };
+    if (updateDto.services !== undefined)
+      prof.services = { ...prof.services, ...updateDto.services };
 
-  if (updateDto.imageUrl !== undefined)
-    prof.imageUrl = updateDto.imageUrl;
+    if (updateDto.imageUrl !== undefined)
+      prof.imageUrl = updateDto.imageUrl;
 
-  // ✅ Use static string paths for documents
-  if (updateDto.documents !== undefined)
-    prof.documents = updateDto.documents;
+    // ✅ Use static string paths for documents
+    if (updateDto.documents !== undefined)
+      prof.documents = updateDto.documents;
 
-  // ✅ AJOUTEZ CETTE LIGNE (elle manque actuellement) :
-  if (updateDto.profilePictureUrl !== undefined)
-  prof.profilePictureUrl = updateDto.profilePictureUrl;
+    // ✅ AJOUTEZ CETTE LIGNE (elle manque actuellement) :
+    if (updateDto.profilePictureUrl !== undefined)
+      prof.profilePictureUrl = updateDto.profilePictureUrl;
 
-  // Update locations if provided
-  if (updateDto.locations !== undefined)
-    prof.locations = updateDto.locations;
+    // ✅ FCM Token support for professionals
+    if (updateDto.fcmToken !== undefined)
+      prof.fcmToken = updateDto.fcmToken;
 
-  return prof.save();
-}
+    // Update locations if provided
+    if (updateDto.locations !== undefined)
+      prof.locations = updateDto.locations;
+
+    return prof.save();
+  }
 
   // =============================
   // TOGGLE ACTIVE

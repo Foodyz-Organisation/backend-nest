@@ -72,6 +72,7 @@ export class UsersService {
     if (updateUserDto.email !== undefined) user.email = updateUserDto.email;
     if (updateUserDto.isActive !== undefined) user.isActive = updateUserDto.isActive;
     if (updateUserDto.profilePictureUrl !== undefined) user.profilePictureUrl = updateUserDto.profilePictureUrl;
+    if (updateUserDto.fcmToken !== undefined) user.fcmToken = updateUserDto.fcmToken; // ✅ FCM Token support
 
     // Handle password separately: hash it
     if (updateUserDto.password !== undefined) {

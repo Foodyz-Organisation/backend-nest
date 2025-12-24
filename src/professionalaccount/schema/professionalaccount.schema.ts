@@ -104,6 +104,9 @@ export class ProfessionalAccount {
     lon: number;        // Longitude (required)
 }[];
 
+  @Prop({ required: false })
+  fcmToken?: string; // Firebase Cloud Messaging token for push notifications
+
 }
 
 export const ProfessionalSchema = SchemaFactory.createForClass(ProfessionalAccount);

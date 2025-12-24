@@ -3,6 +3,7 @@ import { AuthService } from './auth.service';
 import { SignupDto } from './dto/Signup.dto';
 import { ProfessionalSignupDto } from './dto/ProfessionalSignup.dto';
 import { LoginDto } from './dto/Login.dto';
+import { GoogleLoginDto } from './dto/GoogleLogin.dto';
 import { ForgotPasswordDto } from './dto/ForgotPassword.dto';
 import { VerifyOtpDto } from 'src/auth/dto/VerifyOtpDto';
 import { ResetPasswordWithOtpDto } from 'src/auth/dto/ResetPassword.dto';
@@ -42,6 +43,13 @@ export class AuthController {
     return this.authService.login(loginData);
   }
 
+  @ApiOperation({ summary: 'Login with Google OAuth' })
+  @ApiResponse({ status: 200, description: 'Google login successful' })
+  @ApiResponse({ status: 401, description: 'Invalid Google token' })
+  @Post('google')
+  async googleLogin(@Body() googleLoginData: GoogleLoginDto) {
+    return this.authService.googleLogin(googleLoginData.idToken);
+  }
 
   @ApiOperation({ summary: 'Send OTP code to email' })
   @ApiResponse({ status: 200, description: 'OTP sent successfully' })

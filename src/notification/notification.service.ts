@@ -1,20 +1,48 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import * as admin from 'firebase-admin';
+import { ConfigService } from '@nestjs/config';
 import { Notification, NotificationDocument, NotificationType } from './schema/notification.schema';
 import { CreateNotificationDto } from './dto/create-notification.dto';
+import { UserAccount, UserDocument } from '../useraccount/schema/useraccount.schema';
+import { ProfessionalAccount, ProfessionalDocument } from '../professionalaccount/schema/professionalaccount.schema';
+import { initializeFirebase } from '../common/firebase.config';
 
 @Injectable()
 export class NotificationService {
+  private readonly logger = new Logger(NotificationService.name);
+  private firebaseInitialized = false;
+
   constructor(
     @InjectModel(Notification.name)
     private notificationModel: Model<NotificationDocument>,
-  ) {}
+    @InjectModel(UserAccount.name)
+    private userModel: Model<UserDocument>,
+    @InjectModel(ProfessionalAccount.name)
+    private profModel: Model<ProfessionalDocument>,
+    private configService: ConfigService,
+  ) {
+    // Initialize Firebase on service creation
+    this.initializeFirebase();
+  }
+
+  private initializeFirebase() {
+    const app = initializeFirebase(this.configService);
+    if (app) {
+      this.firebaseInitialized = true;
+      this.logger.log('✅ Firebase initialized for push notifications');
+    } else {
+      this.firebaseInitialized = false;
+      this.logger.log('ℹ️ Firebase not configured. Push notifications will be skipped (notifications will still be saved to database).');
+    }
+  }
 
   // -----------------------------
-  // CREATE NOTIFICATION
+  // CREATE NOTIFICATION (Updated with Push)
   // -----------------------------
   async create(createDto: CreateNotificationDto): Promise<Notification> {
+    // 1. Save to Database
     const notification = new this.notificationModel({
       userId: createDto.userId,
       professionalId: createDto.professionalId,
@@ -32,7 +60,108 @@ export class NotificationService {
       isRead: false,
     });
 
-    return notification.save();
+    const savedNotification = await notification.save();
+
+    // 2. Send Real Push Notification (non-blocking)
+    this.sendPushNotification(createDto).catch((error) => {
+      this.logger.error(`Failed to send push notification: ${error.message}`);
+    });
+
+    return savedNotification;
+  }
+
+  // -----------------------------
+  // 🔥 SEND PUSH NOTIFICATION
+  // -----------------------------
+    // -----------------------------
+  // 🔥 SEND PUSH NOTIFICATION (DEBUG VERSION)
+  // -----------------------------
+  private async sendPushNotification(dto: CreateNotificationDto): Promise<void> {
+    this.logger.log(`🔍 [DEBUG] Starting sendPushNotification...`);
+    this.logger.log(`🔍 [DEBUG] Target: User=${dto.userId} OR Pro=${dto.professionalId}`);
+
+    if (!this.firebaseInitialized) {
+      this.logger.debug('⚠️ [DEBUG] Skipping: Firebase not initialized');
+      return;
+    }
+
+    try {
+      let fcmToken: string | undefined;
+      let recipientType = 'Unknown';
+      let recipientId = '';
+
+      // Find Recipient & Token
+      if (dto.userId) {
+        recipientType = 'User';
+        recipientId = dto.userId;
+        this.logger.log(`🔍 [DEBUG] Looking up User: ${recipientId}`);
+        const user = await this.userModel.findById(dto.userId).select('fcmToken email username').lean();
+        
+        if (user) {
+             this.logger.log(`🔍 [DEBUG] User Found: ${user.username} (${user.email})`);
+             this.logger.log(`🔍 [DEBUG] User FCM Token in DB: ${user.fcmToken ? user.fcmToken.substring(0, 15) + '...' : 'UNDEFINED/NULL'}`);
+             fcmToken = user.fcmToken;
+        } else {
+             this.logger.warn(`⚠️ [DEBUG] User NOT found in DB!`);
+        }
+
+      } else if (dto.professionalId) {
+        recipientType = 'Professional';
+        recipientId = dto.professionalId;
+        this.logger.log(`🔍 [DEBUG] Looking up Professional: ${recipientId}`);
+        const prof = await this.profModel.findById(dto.professionalId).select('fcmToken email').lean();
+
+        if (prof) {
+             this.logger.log(`🔍 [DEBUG] Pro Found: ${prof.email}`);
+             this.logger.log(`🔍 [DEBUG] Pro FCM Token in DB: ${prof.fcmToken ? prof.fcmToken.substring(0, 15) + '...' : 'UNDEFINED/NULL'}`);
+             fcmToken = prof.fcmToken;
+        } else {
+             this.logger.warn(`⚠️ [DEBUG] Professional NOT found in DB!`);
+        }
+      }
+
+      if (!fcmToken) {
+        this.logger.error(`❌ [DEBUG] ABORTING: No FCM Token found for ${recipientType} (${recipientId}). Cannot send push.`);
+        return;
+      }
+
+      // Convert metadata values to strings (Firebase requirement)
+      const dataPayload: Record<string, string> = {
+        type: dto.type,
+        conversationId: dto.conversationId || '',
+        orderId: dto.orderId || '',
+        messageId: dto.messageId || '',
+      };
+
+      // Add metadata fields as strings
+      if (dto.metadata) {
+        Object.keys(dto.metadata).forEach((key) => {
+          dataPayload[key] = String(dto.metadata![key]);
+        });
+      }
+
+      const payload: admin.messaging.Message = {
+        token: fcmToken,
+        notification: {
+          title: dto.title,
+          body: dto.message,
+        },
+        data: dataPayload,
+        android: {
+            priority: 'high',
+            notification: {
+                channelId: 'default_notification_channel_id',
+            }
+        }
+      };
+
+      this.logger.log(`🚀 [DEBUG] Sending to Firebase Admin...`);
+      const response = await admin.messaging().send(payload);
+      this.logger.log(`✅ [DEBUG] Firebase Success! Message ID: ${response}`);
+
+    } catch (error) {
+      this.logger.error(`❌ [DEBUG] Push Failed Exception: ${error.message}`, error.stack);
+    }
   }
 
   // -----------------------------
@@ -45,7 +174,6 @@ export class NotificationService {
     orderId?: string,
     metadata?: any,
   ): Promise<Notification> {
-    // Generate title and message based on type
     let title: string;
     let message: string;
 
@@ -139,7 +267,9 @@ export class NotificationService {
     switch (type) {
       case NotificationType.POST_CREATED:
         title = 'New Post from Your Follow';
-        message = postCaption ? `New post: "${postCaption.substring(0, 50)}${postCaption.length > 50 ? '...' : ''}"` : 'A new post has been shared.';
+        message = postCaption
+          ? `New post: "${postCaption.substring(0, 50)}${postCaption.length > 50 ? '...' : ''}"`
+          : 'A new post has been shared.';
         break;
       case NotificationType.POST_LIKED:
         title = 'Your Post Was Liked';
@@ -191,7 +321,7 @@ export class NotificationService {
       professionalId: professionalId ? professionalId : undefined,
       type: NotificationType.DEAL_CREATED,
       title: 'New Deal Available',
-      message: restaurantName 
+      message: restaurantName
         ? `Check out the new deal "${dealName}" from ${restaurantName}!`
         : `A new deal "${dealName}" is now available!`,
       dealId,
@@ -224,7 +354,9 @@ export class NotificationService {
         break;
       case NotificationType.RECLAMATION_UPDATED:
         title = 'Reclamation Status Updated';
-        message = status ? `Your reclamation status has been updated to: ${status}.` : 'Your reclamation status has been updated.';
+        message = status
+          ? `Your reclamation status has been updated to: ${status}.`
+          : 'Your reclamation status has been updated.';
         break;
       case NotificationType.RECLAMATION_RESPONDED:
         title = 'Reclamation Response';
@@ -269,15 +401,11 @@ export class NotificationService {
     switch (type) {
       case NotificationType.MESSAGE_RECEIVED:
         title = senderName ? `New Message from ${senderName}` : 'New Message';
-        message = messagePreview 
-          ? messagePreview.substring(0, 100)
-          : 'You have received a new message.';
+        message = messagePreview ? messagePreview.substring(0, 100) : 'You have received a new message.';
         break;
       case NotificationType.CONVERSATION_STARTED:
         title = 'New Conversation Started';
-        message = senderName 
-          ? `${senderName} started a conversation with you.`
-          : 'A new conversation has started.';
+        message = senderName ? `${senderName} started a conversation with you.` : 'A new conversation has started.';
         break;
       default:
         title = 'Chat Notification';
@@ -369,7 +497,7 @@ export class NotificationService {
     const notification = await this.notificationModel.findById(notificationId);
     if (!notification) {
       throw new Error('Notification not found');
-  }
+    }
     notification.isRead = true;
     return notification.save();
   }
