@@ -19,7 +19,21 @@ export class ProfessionalAccount {
   fullName?: string; // will act as business name in the frontend
 
   @Prop()
-  licenseNumber?: string;
+  licenseNumber?: string; // Restaurant permit/authorization number
+
+  @Prop()
+  licenseImageUrl?: string; // Supabase URL of the restaurant permit image
+
+  @Prop({ type: Object })
+  licenseValidation?: {
+    isValidated: boolean;
+    validatedAt?: Date;
+    confidence?: 'high' | 'medium' | 'low';
+    extractedText?: string;
+    tunisianKeywordsFound?: string[];
+    rejectionReason?: string; // If validation failed, store reason
+    documentType?: string; // e.g., "Autorisation d'exploitation d'un restaurant"
+  };
 
   @Prop()
   description?: string;

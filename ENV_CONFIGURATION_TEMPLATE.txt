@@ -1,0 +1,99 @@
+# ================================================
+# ENVIRONMENT CONFIGURATION TEMPLATE
+# Copy these variables to your .env file
+# ================================================
+
+# ================================================
+# DATABASE
+# ================================================
+MONGO_URI=mongodb://localhost:27017/your-database-name
+# OR for MongoDB Atlas:
+# MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/database
+
+# ================================================
+# JWT AUTHENTICATION
+# ================================================
+JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+# Generate a random secret: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+
+# ================================================
+# GOOGLE CLOUD VISION (for License OCR)
+# Choose ONE of the following options:
+# ================================================
+
+# Option 1: JSON credentials as environment variable (RECOMMENDED for production)
+GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"your-project","private_key_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n","client_email":"...","client_id":"...","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_x509_cert_url":"..."}
+
+# Option 2: Path to credentials file (RECOMMENDED for local development)
+# GOOGLE_APPLICATION_CREDENTIALS=./config/google-credentials.json
+
+# ================================================
+# SUPABASE STORAGE (for License Images)
+# ================================================
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=your-supabase-service-role-key-here
+SUPABASE_MEDIA_BUCKET_NAME=uploads
+
+# Get these from: https://app.supabase.com/project/YOUR_PROJECT/settings/api
+# - SUPABASE_URL: Found under "Project URL"
+# - SUPABASE_SERVICE_KEY: Found under "service_role secret" (NOT anon public)
+
+# ================================================
+# EMAIL SERVICE (for OTP/Password Reset)
+# ================================================
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USER=your-email@gmail.com
+MAIL_PASSWORD=your-app-password
+MAIL_FROM="Your App Name <your-email@gmail.com>"
+
+# For Gmail: Enable "2-Step Verification" and create an "App Password"
+# https://myaccount.google.com/apppasswords
+
+# ================================================
+# APPLICATION
+# ================================================
+PORT=3000
+NODE_ENV=development
+# Change to 'production' in production environment
+
+# ================================================
+# FIREBASE (for Push Notifications - Optional)
+# ================================================
+# FIREBASE_PROJECT_ID=your-firebase-project-id
+# FIREBASE_CLIENT_EMAIL=your-firebase-client-email
+# FIREBASE_PRIVATE_KEY=your-firebase-private-key
+
+# ================================================
+# STRIPE (for Payments - Optional)
+# ================================================
+# STRIPE_SECRET_KEY=sk_test_...
+# STRIPE_PUBLISHABLE_KEY=pk_test_...
+# STRIPE_WEBHOOK_SECRET=whsec_...
+
+# ================================================
+# CORS (adjust for your frontend domain)
+# ================================================
+# FRONTEND_URL=http://localhost:3000
+# Or for production:
+# FRONTEND_URL=https://your-frontend-domain.com
+
+# ================================================
+# IMPORTANT NOTES
+# ================================================
+# 1. NEVER commit .env file to git
+# 2. Add .env to .gitignore
+# 3. Use strong, random secrets in production
+# 4. Rotate secrets periodically
+# 5. Keep credentials secure and private
+# 6. Use environment-specific files (.env.dev, .env.prod)
+
+# ================================================
+# HOW TO USE THIS FILE
+# ================================================
+# 1. Copy this content to a new file named ".env" in your project root
+# 2. Fill in all the required values
+# 3. Never share your .env file with anyone
+# 4. Make sure .env is listed in .gitignore
+
+

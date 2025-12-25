@@ -40,10 +40,22 @@ export class ProfessionalSignupDto {
   @IsNotEmpty()
   fullName: string;
 
-  @ApiProperty({ description: 'Optional license number', example: 'LIC123456' })
+  @ApiProperty({ 
+    description: 'Optional restaurant permit number (will be auto-extracted from image)', 
+    example: 'N° 12345' 
+  })
   @IsOptional()
   @IsString()
   licenseNumber?: string;
+
+  @ApiProperty({ 
+    description: 'Base64 encoded restaurant permit image - "Autorisation d\'exploitation d\'un restaurant" (required for validation)', 
+    example: 'data:image/jpeg;base64,/9j/4AAQSkZJRg...',
+    required: true
+  })
+  @IsNotEmpty()
+  @IsString()
+  licenseImage: string; // Base64 encoded restaurant permit image
 
   @ApiProperty({ description: 'Optional uploaded documents (file paths)', example: ['/uploads/license.pdf'] })
   @IsOptional()

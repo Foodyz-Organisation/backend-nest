@@ -12,6 +12,8 @@ import { LoginDto } from './dto/Login.dto';
 import { verifyGoogleToken } from './OAuth2Client';
 import * as crypto from 'crypto';
 import * as nodemailer from 'nodemailer';
+import { TunisianLicenseValidatorService } from '../professionalaccount/tunisian-license-validator.service';
+import { SupabaseStorageService } from '../common/services/supabase-storage.service';
 
 @Injectable()
 export class AuthService {
@@ -22,6 +24,8 @@ export class AuthService {
     @InjectModel(ProfessionalAccount.name) private profModel: Model<ProfessionalDocument>,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private licenseValidator: TunisianLicenseValidatorService,
+    private supabaseStorage: SupabaseStorageService,
   ) {}
 
   // ================= User Signup =================
@@ -46,27 +50,85 @@ export class AuthService {
     return { message: 'User registered successfully' };
   }
 
-  // ================= Professional Signup =================
+  // ================= Professional Signup with Restaurant Permit Validation =================
   async professionalSignup(profData: ProfessionalSignupDto) {
     if (!profData.password) throw new BadRequestException('Password is required');
+    if (!profData.licenseImage) throw new BadRequestException('Restaurant permit image is required');
+    
     const normalizedEmail = profData.email.trim().toLowerCase();
     
-    // Vérifier si l'email existe déjà
+    // Check if email already exists
     const exists = await this.profModel.findOne({ email: normalizedEmail }).exec();
     if (exists) throw new BadRequestException('Email already registered');
     
+    console.log('🚀 Starting professional signup with restaurant permit validation...');
+    
+    // Step 1: Validate the restaurant permit image using OCR
+    console.log('📸 Validating Tunisian restaurant operation permit...');
+    const validationResult = await this.licenseValidator.validateLicenseFromBase64(profData.licenseImage);
+    
+    // Step 2: Check if permit is valid
+    if (!validationResult.isValid) {
+      console.log('❌ Restaurant permit validation failed:', validationResult.reason);
+      throw new BadRequestException({
+        message: 'Restaurant permit validation failed',
+        reason: validationResult.reason,
+        details: {
+          extractedText: validationResult.extractedText,
+          tunisianKeywordsFound: validationResult.tunisianKeywordsFound,
+        }
+      });
+    }
+    
+    console.log('✅ Restaurant permit validated successfully!');
+    console.log(`📋 Permit Number: ${validationResult.licenseNumber}`);
+    console.log(`🎯 Confidence: ${validationResult.confidence}`);
+    
+    // Step 3: Upload restaurant permit image to Supabase
+    console.log('☁️ Uploading restaurant permit image to Supabase...');
+    const licenseImageUrl = await this.supabaseStorage.uploadBase64Image(
+      profData.licenseImage,
+      'restaurant-permits' // folder name in Supabase
+    );
+    console.log('✅ Restaurant permit image uploaded:', licenseImageUrl);
+    
+    // Step 4: Hash password and create professional account
     const hashed = await bcrypt.hash(profData.password, 10);
+    
     const newProf = new this.profModel({
-      ...profData,
       email: normalizedEmail,
       password: hashed,
+      fullName: profData.fullName,
+      licenseNumber: validationResult.licenseNumber, // Use extracted permit number
+      licenseImageUrl, // Store Supabase URL
+      licenseValidation: {
+        isValidated: true,
+        validatedAt: new Date(),
+        confidence: validationResult.confidence,
+        extractedText: validationResult.extractedText,
+        tunisianKeywordsFound: validationResult.tunisianKeywordsFound,
+        documentType: 'Autorisation d\'exploitation d\'un restaurant',
+      },
       role: 'professional',
       isActive: true,
-      locations: profData.locations || [], // Ensure locations array is set
+      locations: profData.locations || [],
+      documents: profData.documents || [],
+      linkedUserId: profData.linkedUserId
+        ? new Types.ObjectId(profData.linkedUserId)
+        : undefined,
     });
+    
     await newProf.save();
-    console.log('✅ Professional registered:', normalizedEmail);
-    return { message: 'Professional registered successfully' };
+    
+    console.log('✅ Professional account created successfully:', normalizedEmail);
+    console.log(`📋 Restaurant Permit Number: ${validationResult.licenseNumber}`);
+    
+    return { 
+      message: 'Professional account registered successfully',
+      permitNumber: validationResult.licenseNumber,
+      confidence: validationResult.confidence,
+      professionalId: newProf._id,
+    };
   }
 
 

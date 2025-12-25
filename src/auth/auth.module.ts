@@ -8,6 +8,8 @@ import { AuthController } from './auth.controller';
 import { UserAccount, UserSchema } from '../useraccount/schema/useraccount.schema';
 import { ProfessionalAccount, ProfessionalSchema } from '../professionalaccount/schema/professionalaccount.schema';
 import { JwtStrategy } from './jwt.strategy';
+import { ProfessionalaccountModule } from '../professionalaccount/professionalaccount.module';
+import { CommonModule } from '../common/common.module';
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { JwtStrategy } from './jwt.strategy';
       { name: UserAccount.name, schema: UserSchema },
       { name: ProfessionalAccount.name, schema: ProfessionalSchema },
     ]),
+    ProfessionalaccountModule, // For license validation
+    CommonModule, // For Supabase storage
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],

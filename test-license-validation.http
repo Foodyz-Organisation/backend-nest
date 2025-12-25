@@ -1,0 +1,134 @@
+### Tunisian License Validation API Tests
+### Use this with REST Client extension in VS Code or import to Postman
+
+@baseUrl = http://localhost:3000
+@contentType = application/json
+
+### Test 1: Validate License (Base64) - Without Signup
+POST {{baseUrl}}/professionals/validate-license
+Content-Type: {{contentType}}
+
+{
+  "licenseImage": "data:image/jpeg;base64,/9j/4AAQSkZJRg..."
+}
+
+###
+# Expected Response (Success):
+# {
+#   "isValid": true,
+#   "licenseNumber": "12345678",
+#   "reason": "License validated successfully",
+#   "extractedText": "REPUBLIQUE TUNISIENNE...",
+#   "confidence": "high",
+#   "tunisianKeywordsFound": ["tunisie", "permis de conduire"]
+# }
+###
+
+### Test 2: Professional Signup with License Validation
+POST {{baseUrl}}/auth/signup/professional
+Content-Type: {{contentType}}
+
+{
+  "email": "professional@example.com",
+  "password": "SecurePassword123!",
+  "fullName": "Ahmed Ben Ali",
+  "licenseImage": "data:image/jpeg;base64,/9j/4AAQSkZJRg...",
+  "locations": [
+    {
+      "name": "Main Branch",
+      "address": "Avenue Habib Bourguiba, Tunis",
+      "lat": 36.8065,
+      "lon": 10.1815
+    }
+  ]
+}
+
+###
+# Expected Response (Success):
+# {
+#   "message": "Professional account registered successfully",
+#   "licenseNumber": "12345678",
+#   "confidence": "high",
+#   "professionalId": "64f1a2b3c4d5e6f7g8h9i0j1"
+# }
+###
+
+### Test 3: Login as Professional
+POST {{baseUrl}}/auth/login
+Content-Type: {{contentType}}
+
+{
+  "email": "professional@example.com",
+  "password": "SecurePassword123!"
+}
+
+###
+# Expected Response:
+# {
+#   "access_token": "eyJhbGciOiJIUzI1NiIs...",
+#   "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
+#   "role": "professional",
+#   "email": "professional@example.com",
+#   "id": "64f1a2b3c4d5e6f7g8h9i0j1",
+#   "username": "Ahmed Ben Ali"
+# }
+###
+
+### Test 4: Get All Professionals
+GET {{baseUrl}}/professionals
+Content-Type: {{contentType}}
+
+###
+
+### Test 5: Get Professional by ID
+@professionalId = 64f1a2b3c4d5e6f7g8h9i0j1
+GET {{baseUrl}}/professionals/{{professionalId}}
+Content-Type: {{contentType}}
+
+###
+
+### Test 6: Invalid License - Non-Tunisian Document
+POST {{baseUrl}}/professionals/validate-license
+Content-Type: {{contentType}}
+
+{
+  "licenseImage": "data:image/jpeg;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+}
+
+###
+# Expected Response (Failure):
+# {
+#   "statusCode": 400,
+#   "message": "License validation failed",
+#   "reason": "This does not appear to be a Tunisian driver's license..."
+# }
+###
+
+### Test 7: Duplicate License - Try to register same license twice
+POST {{baseUrl}}/auth/signup/professional
+Content-Type: {{contentType}}
+
+{
+  "email": "another@example.com",
+  "password": "SecurePassword123!",
+  "fullName": "Fatma Ben Hassan",
+  "licenseImage": "data:image/jpeg;base64,/9j/4AAQSkZJRg..."
+}
+
+###
+# Expected Response (Failure):
+# {
+#   "statusCode": 400,
+#   "message": "License validation failed",
+#   "reason": "This license number is already registered in our system."
+# }
+###
+
+### Notes:
+### 1. Replace base64 strings with actual Tunisian license images
+### 2. Convert images to base64 using: https://www.base64-image.de/
+### 3. Or use CLI: base64 -i license.jpg | pbcopy
+### 4. Ensure backend is running: npm run start:dev
+### 5. Check logs for detailed validation information
+
+
