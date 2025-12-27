@@ -18,7 +18,7 @@ import { NotificationModule } from '../notification/notification.module';
 @Module({
   imports: [
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'supersecretkey',
+      secret: process.env.JWT_SECRET,
     }),
     // 🔹 Enregistre les modèles Conversation et Message dans Mongoose
     MongooseModule.forFeature([
@@ -33,4 +33,4 @@ import { NotificationModule } from '../notification/notification.module';
   providers: [ChatManagementService, ChatManagementGateway, SpamDetectionService, BadWordsDetectionService],
   exports: [ChatManagementService],
 })
-export class ChatManagementModule {}
+export class ChatManagementModule { }

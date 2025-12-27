@@ -67,7 +67,10 @@ export class TunisianLicenseValidatorService {
     private configService: ConfigService,
   ) {
     // Get OCR.space API key from environment or use free public key
-    this.ocrApiKey = this.configService.get<string>('OCR_API_KEY') || 'K87899142388957';
+    this.ocrApiKey = this.configService.get<string>('OCR_API_KEY')!;
+    if (!this.ocrApiKey) {
+      throw new Error('OCR_API_KEY is not defined in environment variables');
+    }
     this.logger.log('✅ OCR.space API initialized (FREE tier - 25,000 requests/month)');
     this.logger.log(`🔑 Using API Key: ${this.ocrApiKey.substring(0, 8)}...`);
   }
@@ -82,23 +85,23 @@ export class TunisianLicenseValidatorService {
 
       // Convert buffer to base64
       let base64Image = imageBuffer.toString('base64');
-      
+
       // Check file size and compress if needed (OCR.space limit: 1MB)
       const sizeInKB = Math.round((base64Image.length * 3) / 4 / 1024);
       this.logger.log(`📊 Original image size: ${sizeInKB} KB`);
-      
+
       if (sizeInKB > 900) { // Compress if > 900KB (leave some margin)
         this.logger.log('🗜️ Image too large, compressing...');
         base64Image = await this.compressBase64Image(base64Image);
         const newSizeInKB = Math.round((base64Image.length * 3) / 4 / 1024);
         this.logger.log(`✅ Compressed to: ${newSizeInKB} KB`);
       }
-      
+
       const base64WithPrefix = `data:image/jpeg;base64,${base64Image}`;
 
       // Strategy: Use OCR Engine 2 with 'eng' - it handles both Latin and Arabic scripts
       this.logger.log('📖 Reading mixed French/Arabic text...');
-      
+
       const response = await axios.post(
         'https://api.ocr.space/parse/image',
         {
@@ -122,14 +125,14 @@ export class TunisianLicenseValidatorService {
       if (response.data.IsErroredOnProcessing) {
         const errorMessage = response.data.ErrorMessage?.[0] || 'OCR processing failed';
         this.logger.error('❌ OCR.space error:', errorMessage);
-        
+
         // Fallback: Try with Arabic language setting
         this.logger.log('🔄 Retrying with Arabic language setting...');
         return this.extractTextWithArabic(base64WithPrefix);
       }
 
       let extractedText = response.data.ParsedResults?.[0]?.ParsedText || '';
-      
+
       // If no Arabic detected, try again with Arabic language
       if (!extractedText.match(/[\u0600-\u06FF]/)) {
         this.logger.log('🔄 No Arabic detected, trying Arabic OCR...');
@@ -138,7 +141,7 @@ export class TunisianLicenseValidatorService {
           extractedText = arabicText;
         }
       }
-      
+
       if (!extractedText || extractedText.trim().length === 0) {
         this.logger.warn('⚠️ No text detected in the image');
         return '';
@@ -148,7 +151,7 @@ export class TunisianLicenseValidatorService {
       this.logger.log(`📝 French text detected: ${extractedText.includes('République') ? 'Yes ✅' : 'No'}`);
       this.logger.log(`📝 Arabic text detected: ${extractedText.match(/[\u0600-\u06FF]/) ? 'Yes ✅' : 'No'}`);
       this.logger.log(`📝 Preview: ${extractedText.substring(0, 100)}...`);
-      
+
       return extractedText;
     } catch (error) {
       this.logger.error('❌ OCR extraction failed:', error.message);
@@ -166,14 +169,14 @@ export class TunisianLicenseValidatorService {
       // This works by keeping every Nth character to reduce size
       const targetSizeKB = 800;
       const currentSizeKB = Math.round((base64String.length * 3) / 4 / 1024);
-      
+
       if (currentSizeKB <= targetSizeKB) {
         return base64String; // Already small enough
       }
-      
+
       // Calculate reduction ratio
       const ratio = targetSizeKB / currentSizeKB;
-      
+
       // For images, we can't just sample characters
       // Instead, return error to force frontend compression
       this.logger.error(`❌ Image too large (${currentSizeKB} KB). Please compress on client side before uploading.`);
@@ -240,13 +243,13 @@ export class TunisianLicenseValidatorService {
     }
 
     // Additional check for restaurant-specific terms
-    const hasRestaurantTerm = 
+    const hasRestaurantTerm =
       normalizedText.includes('restaurant') ||
       normalizedText.includes('مطعم') ||
       normalizedText.includes('établissement') ||
       normalizedText.includes('etablissement');
 
-    const hasAuthorizationTerm = 
+    const hasAuthorizationTerm =
       normalizedText.includes('autorisation') ||
       normalizedText.includes('ترخيص') ||
       normalizedText.includes('exploitation');
@@ -267,17 +270,17 @@ export class TunisianLicenseValidatorService {
     // Try each pattern
     for (const pattern of this.LICENSE_NUMBER_PATTERNS) {
       const matches = normalizedText.match(pattern);
-      
+
       if (matches && matches.length > 0) {
         // Return the first valid match
         // Prioritize longer numbers (more likely to be permit numbers)
         const sortedMatches = matches.sort((a, b) => b.length - a.length);
-        
+
         for (const match of sortedMatches) {
           // Clean the match (remove N°, no, etc.)
           let cleaned = match.replace(/(?:N°|n°|no|NO)[:\s]*/gi, '').trim();
           cleaned = cleaned.replace(/[\/\-\s]/g, '');
-          
+
           // Permit numbers should have at least 4 characters
           if (cleaned.length >= 4) {
             this.logger.log(`✅ Extracted permit number: ${match}`);
@@ -296,8 +299,8 @@ export class TunisianLicenseValidatorService {
    */
   async checkDuplicateLicense(licenseNumber: string): Promise<boolean> {
     try {
-      const existing = await this.profModel.findOne({ 
-        licenseNumber: { $regex: new RegExp(`^${licenseNumber}$`, 'i') } 
+      const existing = await this.profModel.findOne({
+        licenseNumber: { $regex: new RegExp(`^${licenseNumber}$`, 'i') }
       }).exec();
 
       if (existing) {
@@ -378,7 +381,7 @@ export class TunisianLicenseValidatorService {
 
       // Step 5: Determine confidence level
       let confidence: 'high' | 'medium' | 'low' = 'medium';
-      
+
       if (foundKeywords.length >= 3 && licenseNumber.length >= 4) {
         confidence = 'high';
       } else if (foundKeywords.length >= 2) {
@@ -386,7 +389,7 @@ export class TunisianLicenseValidatorService {
       }
 
       this.logger.log('✅ Restaurant permit validation successful!');
-      
+
       return {
         isValid: true,
         licenseNumber,
@@ -428,7 +431,7 @@ export class TunisianLicenseValidatorService {
     try {
       // Validate file type
       const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-      
+
       if (!allowedMimeTypes.includes(file.mimetype)) {
         throw new BadRequestException('Invalid file type. Please upload a JPG, PNG, or WebP image.');
       }

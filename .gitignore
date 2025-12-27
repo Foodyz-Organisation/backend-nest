@@ -56,7 +56,6 @@ google-oauth*.json
 oauth2-credentials*.json
 client_secret*.json
 service-account*.json
-src/auth/OAuth2Client.ts
 
 # Any credentials or secrets files
 *credentials*.json

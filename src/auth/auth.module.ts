@@ -17,12 +17,16 @@ import { CommonModule } from '../common/common.module';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET') || 'supersecretkey',
-        signOptions: { 
-          expiresIn: '24h', // ✅ Durée par défaut de 24h
-        },
-      }),
+      useFactory: async (configService: ConfigService) => {
+        const secret = configService.get<string>('JWT_SECRET');
+        if (!secret) throw new Error('JWT_SECRET is not defined');
+        return {
+          secret,
+          signOptions: {
+            expiresIn: '24h', // ✅ Durée par défaut de 24h
+          },
+        };
+      },
     }),
     MongooseModule.forFeature([
       { name: UserAccount.name, schema: UserSchema },
@@ -35,4 +39,4 @@ import { CommonModule } from '../common/common.module';
   providers: [AuthService, JwtStrategy],
   exports: [AuthService, JwtStrategy, PassportModule], // ✅ Exporter pour utilisation ailleurs
 })
-export class AuthModule {}
+export class AuthModule { }

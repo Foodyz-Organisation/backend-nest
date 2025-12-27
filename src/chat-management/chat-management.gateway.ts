@@ -9,6 +9,7 @@ import {
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { Server, Socket } from 'socket.io';
 import { ChatManagementService } from './chat-management.service';
 import { SpamDetectionService } from './spam-detection.service';
@@ -28,6 +29,7 @@ export class ChatManagementGateway
     private readonly spamDetectionService: SpamDetectionService,
     private readonly badWordsDetectionService: BadWordsDetectionService,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) { }
 
   afterInit() {
@@ -130,8 +132,11 @@ export class ChatManagementGateway
       throw new WsException('Missing authentication token');
     }
 
+    const secret = this.configService.get<string>('JWT_SECRET');
+    if (!secret) throw new WsException('JWT_SECRET missing in env');
+
     const payload = this.jwtService.verify(token, {
-      secret: process.env.JWT_SECRET || 'supersecretkey',
+      secret,
     });
 
     const userId = payload?.sub || payload?.userId;
