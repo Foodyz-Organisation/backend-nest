@@ -14,6 +14,7 @@ import { Like, LikeSchema } from './schemas/like.schema'; // <-- NEW
 import { Save, SaveSchema } from './schemas/save.schema'; // <-- NEW
 import { NotificationModule } from '../notification/notification.module';
 import { InteractionService } from './interaction.service';
+import { ChatManagementModule } from '../chat-management/chat-management.module';
 
 
 @Module({
@@ -27,6 +28,7 @@ import { InteractionService } from './interaction.service';
       { name: Save.name, schema: SaveSchema },
     ]),
     NotificationModule,
+    ChatManagementModule, // <-- For sharing posts via chat
   ],
   controllers: [PostsController],
   providers: [PostsService, InteractionService],

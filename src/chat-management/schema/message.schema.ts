@@ -14,9 +14,18 @@ export class Message {
   @Prop({ type: String, required: true })
   content: string;
 
-  @Prop({ type: String, enum: ['text', 'image', 'file'], default: 'text' })
+  // Message types:
+  // - 'text': Regular text message
+  // - 'image': Image message
+  // - 'file': File message
+  // - 'post': Shared post message (meta contains post details)
+  @Prop({ type: String, enum: ['text', 'image', 'file', 'post'], default: 'text' })
   type: string;
 
+  // Meta field usage:
+  // For type='post', meta contains: { postId, postCaption, postMediaUrls, postMediaType, 
+  // postFoodType, postThumbnailUrl, postOwner: { id, name, avatarUrl }, price, preparationTime,
+  // likeCount, commentCount, saveCount }
   @Prop({ type: Object, default: {} })
   meta?: Record<string, any>;
 

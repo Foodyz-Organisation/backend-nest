@@ -104,12 +104,25 @@ export class ChatManagementService {
 
         const displayAvatar = otherParticipant?.avatarUrl || '';
 
+        // Determine message preview text
+        let messagePreview = 'No message yet';
+        if (lastMessage) {
+          if (lastMessage.type === 'post') {
+            // For shared posts, show icon and text instead of empty content
+            const icon = lastMessage.meta?.postMediaType === 'reel' ? '🎥' : '📷';
+            messagePreview = `${icon} Shared a post`;
+          } else if (lastMessage.content) {
+            messagePreview = lastMessage.content;
+          }
+        }
+
         return {
           id: conv._id.toString(),
           name: displayName,
           participantEmail: otherParticipant?.email,
           avatarUrl: displayAvatar,
-          message: lastMessage?.content || 'No message yet',
+          message: messagePreview,
+          lastMessage: lastMessage,  // Include full message for frontend to access type and meta
           time:
             lastMessage?.createdAt?.toISOString?.() ||
             conv.updatedAt?.toISOString?.() ||

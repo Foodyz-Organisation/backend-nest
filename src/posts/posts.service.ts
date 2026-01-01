@@ -25,6 +25,7 @@ import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../notification/schema/notification.schema';
 import { InteractionService } from './interaction.service';
 import { SupabaseStorageService } from '../common/services/supabase-storage.service';
+import { ChatManagementService } from '../chat-management/chat-management.service';
 
 type MulterFile = Express.Multer.File;
 
@@ -47,6 +48,7 @@ export class PostsService {
     private notificationService: NotificationService,
     private interactionService: InteractionService,
     private supabaseStorageService: SupabaseStorageService,
+    private chatManagementService: ChatManagementService,
   ) {}
 
   /**
@@ -861,6 +863,196 @@ async createComment(
     ));
 
     return trendingPosts as PostDocument[]; // Assert type here
+  }
+  
+  /**
+   * Share a post with another user via chat
+   * @param postId The ID of the post to share
+   * @param senderId The ID of the user sharing the post
+   * @param senderModel The model type of the sender (UserAccount or ProfessionalAccount)
+   * @param recipientId The ID of the recipient user
+   * @param message Optional message to accompany the shared post
+   * @returns The conversation and message created
+   */
+  async sharePost(
+    postId: Types.ObjectId,
+    senderId: Types.ObjectId,
+    senderModel: 'UserAccount' | 'ProfessionalAccount',
+    recipientId: Types.ObjectId,
+    message?: string,
+  ) {
+    // 1. Verify the post exists and get its ownerModel first
+    const post = await this.postModel.findById(postId).exec();
+
+    if (!post) {
+      throw new NotFoundException(`Post with ID "${postId}" not found.`);
+    }
+
+    // 2. Now populate the owner based on the ownerModel
+    await post.populate({
+      path: 'ownerId',
+      model: post.ownerModel,
+      select: '_id username fullName profilePictureUrl email professionalData.fullName professionalData.profilePictureUrl'
+    });
+
+    // 3. Verify the recipient exists (check both UserAccount and ProfessionalAccount)
+    const recipientUser = await this.userModel.findById(recipientId).exec();
+    const recipientProfessional = !recipientUser 
+      ? await this.professionalModel.findById(recipientId).exec()
+      : null;
+
+    if (!recipientUser && !recipientProfessional) {
+      throw new NotFoundException(`Recipient with ID "${recipientId}" not found.`);
+    }
+
+    // 4. Create or get existing private conversation between sender and recipient
+    const conversation = await this.chatManagementService.createConversation(
+      {
+        kind: 'private',
+        participants: [recipientId.toString()],
+        title: '',
+        meta: {},
+      },
+      senderId.toString(),
+    );
+
+    // 5. Prepare the message content and metadata
+    // Content is empty by default - frontend will display the post image instead
+    // Only include custom message text if user provided one
+    const messageContent = message || '';
+    
+    // Get sender name for notification
+    const senderUser = senderModel === 'UserAccount' 
+      ? await this.userModel.findById(senderId).lean()
+      : null;
+    const senderProfessional = !senderUser 
+      ? await this.professionalModel.findById(senderId).lean()
+      : null;
+    const senderName = senderUser?.fullName || senderUser?.username || 
+                      senderProfessional?.fullName || (senderProfessional as any)?.professionalData?.fullName || 'Someone';
+
+    // Determine the primary image to display (for easy frontend access)
+    const postPrimaryImageUrl = post.mediaType === 'reel' 
+      ? post.thumbnailUrl || post.mediaUrls[0]  // For reels, use thumbnail
+      : post.mediaUrls[0];  // For images, use first image
+
+    // 6. Send the message with post data embedded in meta
+    // The message type 'post' tells frontend to render the post image instead of text
+    const sharedMessage = await this.chatManagementService.sendMessage({
+      conversationId: (conversation._id as Types.ObjectId).toString(),
+      senderId: senderId.toString(),
+      content: messageContent,  // Empty unless user added custom text
+      type: 'post', // Special type to indicate this is a shared post
+      meta: {
+        // Flag to easily identify shared posts
+        isSharedPost: true,
+        
+        // Shared by information
+        sharedBy: {
+          id: senderId.toString(),
+          name: senderName,
+          model: senderModel,
+        },
+        
+        // Post identification
+        postId: post._id.toString(),
+        
+        // Primary image for display (easy access for frontend)
+        postPrimaryImageUrl: postPrimaryImageUrl,
+        
+        // Complete post data
+        postCaption: post.caption,
+        postMediaUrls: post.mediaUrls,
+        postMediaType: post.mediaType,
+        postFoodType: post.foodType,
+        postThumbnailUrl: post.thumbnailUrl,
+        
+        // Post owner information
+        postOwner: {
+          id: (post.ownerId as any)?._id?.toString() || (post.ownerId as Types.ObjectId)?.toString() || '',
+          name: (post.ownerId as any)?.username || (post.ownerId as any)?.fullName || (post.ownerId as any)?.professionalData?.fullName || 'Unknown',
+          avatarUrl: (post.ownerId as any)?.profilePictureUrl || (post.ownerId as any)?.professionalData?.profilePictureUrl || '',
+        },
+        
+        // Post details
+        price: post.price,
+        preparationTime: post.preparationTime,
+        
+        // Engagement stats
+        likeCount: post.likeCount,
+        commentCount: post.commentCount,
+        saveCount: post.saveCount,
+        viewsCount: post.viewsCount,
+        
+        // Timestamps
+        postCreatedAt: post.createdAt,
+        sharedAt: new Date(),
+      },
+    });
+
+    // 7. Create notification for the recipient
+    try {
+      const recipientModel = recipientUser ? 'UserAccount' : 'ProfessionalAccount';
+      await this.notificationService.createChatNotification(
+        NotificationType.MESSAGE_RECEIVED,
+        (sharedMessage._id as Types.ObjectId).toString(),
+        (conversation._id as Types.ObjectId).toString(),
+        senderId.toString(),
+        senderName,
+        recipientId.toString(),
+        recipientModel,
+        `${senderName} shared a post with you`,
+        {
+          messageId: (sharedMessage._id as Types.ObjectId).toString(),
+          conversationId: (conversation._id as Types.ObjectId).toString(),
+          senderId: senderId.toString(),
+          postId: post._id.toString(),
+          isSharedPost: true,
+        },
+      );
+    } catch (notifError) {
+      console.error('Error creating share notification:', notifError);
+      // Don't fail the sharing if notification fails
+    }
+
+    return {
+      success: true,
+      message: 'Post shared successfully',
+      data: {
+        conversation: {
+          id: (conversation._id as Types.ObjectId).toString(),
+          participants: conversation.participants.map(p => p.toString()),
+        },
+        sharedMessage: {
+          id: (sharedMessage._id as Types.ObjectId).toString(),
+          type: 'post',
+          content: messageContent,
+          meta: sharedMessage.meta,
+          createdAt: sharedMessage.createdAt,
+        },
+        post: {
+          id: post._id.toString(),
+          caption: post.caption,
+          mediaUrls: post.mediaUrls,
+          primaryImageUrl: postPrimaryImageUrl,
+          mediaType: post.mediaType,
+          foodType: post.foodType,
+          thumbnailUrl: post.thumbnailUrl,
+          owner: {
+            id: (post.ownerId as any)?._id?.toString() || (post.ownerId as Types.ObjectId)?.toString() || '',
+            name: (post.ownerId as any)?.username || (post.ownerId as any)?.fullName || (post.ownerId as any)?.professionalData?.fullName || 'Unknown',
+          },
+          price: post.price,
+          preparationTime: post.preparationTime,
+          stats: {
+            likes: post.likeCount,
+            comments: post.commentCount,
+            saves: post.saveCount,
+            views: post.viewsCount,
+          },
+        },
+      },
+    };
   }
   
   

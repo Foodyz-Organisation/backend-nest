@@ -33,6 +33,7 @@ import { PostDocument, Post as PostSchema, FoodType } from './schemas/post.schem
 import { UploadResponseDto } from './dto/upload-response.dto';
 import { CreateCommentDto } from './dto/create-comment.dto'; // Ensure this is imported if used
 import { Comment as CommentSchema } from './schemas/comment.schema'; // <-- Import CommentSchema for response types
+import { SharePostDto } from './dto/share-post.dto';
 
 
 @ApiTags('posts')
@@ -511,6 +512,100 @@ export class PostsController {
       throw new BadRequestException('Invalid user ID in x-user-id header.');
     }
     return this.postsService.createComment(new Types.ObjectId(postId), new Types.ObjectId(userId), createCommentDto); // <-- Pass userId
+  }
+
+  // --- Share a Post ---
+  @Post(':id/share')
+  @ApiOperation({ 
+    summary: 'Share a post with another user via chat',
+    description: 'Creates or uses an existing private conversation to share a post with a recipient user. The post is sent as a message with type "post" containing the post image and data. The message content is empty by default (unless a custom message is provided), so the frontend displays the actual post image instead of text like "Shared a post with you".'
+  })
+  @ApiResponse({ 
+    status: 201, 
+    description: 'Post shared successfully. The message contains the post image in meta.postPrimaryImageUrl for easy display.',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean', example: true },
+        message: { type: 'string', example: 'Post shared successfully' },
+        data: {
+          type: 'object',
+          properties: {
+            conversation: { 
+              type: 'object',
+              description: 'The conversation where the post was shared',
+              properties: {
+                id: { type: 'string' },
+                participants: { type: 'array', items: { type: 'string' } }
+              }
+            },
+            sharedMessage: { 
+              type: 'object',
+              description: 'The message with type "post" and post data in meta',
+              properties: {
+                id: { type: 'string' },
+                type: { type: 'string', example: 'post' },
+                content: { type: 'string', description: 'Empty unless user provided custom message' },
+                meta: {
+                  type: 'object',
+                  properties: {
+                    isSharedPost: { type: 'boolean', example: true },
+                    postId: { type: 'string' },
+                    postPrimaryImageUrl: { type: 'string', description: 'Main image to display' },
+                    postCaption: { type: 'string' },
+                    postMediaType: { type: 'string' },
+                    postOwner: { type: 'object' },
+                    likeCount: { type: 'number' },
+                    commentCount: { type: 'number' }
+                  }
+                }
+              }
+            },
+            post: { type: 'object', description: 'Complete post details with primaryImageUrl' }
+          }
+        }
+      }
+    }
+  })
+  @ApiResponse({ status: 404, description: 'Post not found or recipient not found' })
+  @ApiResponse({ status: 400, description: 'Bad request (validation errors)' })
+  @ApiHeader({
+    name: 'x-user-id',
+    description: 'The ID of the user sharing the post',
+    required: true,
+  })
+  @ApiHeader({
+    name: 'x-owner-type',
+    description: 'The type of account sharing the post: "UserAccount" or "ProfessionalAccount"',
+    required: true,
+    enum: ['UserAccount', 'ProfessionalAccount']
+  })
+  async sharePost(
+    @Param('id') postId: string,
+    @Headers('x-user-id') senderId: string,
+    @Headers('x-owner-type') senderModel: 'UserAccount' | 'ProfessionalAccount',
+    @Body() sharePostDto: SharePostDto,
+  ) {
+    if (!Types.ObjectId.isValid(postId)) {
+      throw new BadRequestException('Invalid post ID format.');
+    }
+    if (!senderId || !Types.ObjectId.isValid(senderId)) {
+      throw new BadRequestException('x-user-id header with a valid ObjectId is required.');
+    }
+    if (!sharePostDto.recipientId || !Types.ObjectId.isValid(sharePostDto.recipientId)) {
+      throw new BadRequestException('Invalid recipient ID format.');
+    }
+    if (!senderModel || (senderModel !== 'UserAccount' && senderModel !== 'ProfessionalAccount')) {
+      throw new BadRequestException('x-owner-type header must be "UserAccount" or "ProfessionalAccount".');
+    }
+
+    return this.postsService.sharePost(
+      new Types.ObjectId(postId),
+      new Types.ObjectId(senderId),
+      senderModel,
+      new Types.ObjectId(sharePostDto.recipientId),
+      sharePostDto.message,
+    );
   }
 
   // =======================================================================
