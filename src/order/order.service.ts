@@ -5,21 +5,27 @@ import { Order, OrderDocument } from './schema/order.schema';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order.dto';
 import { Cart, CartDocument } from '../cartitem/schema/cartitem.schema';
+import { MenuItem, MenuItemDocument } from '../menuitem/schema/menuitem.schema';
 import { OrderStatus } from './schema/enums/order-status.enum';
 import { OrderType } from './schema/enums/order-type.enum';
 import { PaymentService } from './payement.service';
 import { StripeService } from './StripeService';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../notification/schema/notification.schema';
+import { GeminiService } from '../gemini/gemini.service';
+import { TimeEstimationRequestDto } from './dto/time-estimation-request.dto';
+import { TimeEstimationResponseDto } from './dto/time-estimation-response.dto';
 
 @Injectable()
 export class OrderService {
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(Cart.name) private cartModel: Model<CartDocument>,
+    @InjectModel(MenuItem.name) private menuItemModel: Model<MenuItemDocument>,
     private paymentService: PaymentService,
     private stripeService: StripeService,
     private notificationService: NotificationService,
+    private geminiService: GeminiService,
   ) { }
 
   // -----------------------------
@@ -68,7 +74,28 @@ export class OrderService {
       paymentId = cardPayment._id as Types.ObjectId;
     }
 
-    // 4. Create order with PENDING status
+
+    // 4. Calculate Base Preparation Time (Sum of all items)
+    let basePreparationMinutes = 0;
+    try {
+      // Extract menu item IDs
+      const menuItemIds = dto.items.map(item => item.menuItemId);
+      // Fetch menu items to get their preparationTimeMinutes
+      const menuItems = await this.menuItemModel.find({ _id: { $in: menuItemIds } }).lean();
+
+      // Sum up prep time * quantity
+      dto.items.forEach(orderItem => {
+        const menuItem = menuItems.find(mi => mi._id.toString() === orderItem.menuItemId.toString());
+        const itemPrepTime = menuItem?.preparationTimeMinutes || 15; // Default 15 min if missing
+        basePreparationMinutes += (itemPrepTime * orderItem.quantity);
+      });
+    } catch (error) {
+      console.error('Failed to calculate base preparation time:', error);
+      basePreparationMinutes = 15; // Fallback default
+    }
+
+
+    // 5. Create order with PENDING status
     const order = new this.orderModel({
       userId: dto.userId,
       professionalId: dto.professionalId,
@@ -78,9 +105,12 @@ export class OrderService {
       status: OrderStatus.PENDING, // Always starts as PENDING
       deliveryAddress: dto.deliveryAddress,
       notes: dto.notes,
+      comment: dto.comment, // Customer comment/special request
       scheduledTime: dto.scheduledTime,
       paymentMethod: dto.paymentMethod,
       paymentId: paymentId,
+      // Store calculated base time
+      basePreparationMinutes: basePreparationMinutes,
     });
 
     const savedOrder = await order.save();
@@ -90,10 +120,10 @@ export class OrderService {
       await this.paymentService.updatePaymentOrderId(paymentId.toString(), String(savedOrder._id));
     }
 
-    // 5. Clear cart after successful order creation
+    // 6. Clear cart after successful order creation
     await this.cartModel.updateOne({ userId: dto.userId }, { items: [] });
 
-    // 6. Create notification for professional (new order received)
+    // 7. Create notification for professional (new order received)
     try {
       await this.notificationService.createOrderNotification(
         NotificationType.ORDER_CREATED,
@@ -112,7 +142,7 @@ export class OrderService {
       // Don't fail order creation if notification fails
     }
 
-    // 7. If CARD payment, return order + clientSecret for frontend
+    // 8. If CARD payment, return order + clientSecret for frontend
     if (dto.paymentMethod === 'CARD') {
       return {
         order: savedOrder,
@@ -128,35 +158,35 @@ export class OrderService {
   // -----------------------------
   // GET ORDERS BY USER (Order History)
   // -----------------------------
-async getOrdersByUser(userId: string): Promise<Order[]> {
-  return this.orderModel
-    .find({ userId })
-    .populate('userId', 'username email')  // ✅ 
-    .sort({ createdAt: -1 })
-    .lean();
-}
+  async getOrdersByUser(userId: string): Promise<Order[]> {
+    return this.orderModel
+      .find({ userId })
+      .populate('userId', 'username email')  // ✅ 
+      .sort({ createdAt: -1 })
+      .lean();
+  }
 
   // -----------------------------
   // GET ORDERS BY PROFESSIONAL (Restaurant Dashboard)
   // -----------------------------
-// order.service.ts
-async getOrdersByProfessional(professionalId: string): Promise<Order[]> {
-  return this.orderModel
-    .find({ professionalId })
-    .populate('userId', 'username email')  // ✅ Change to username
-    .sort({ createdAt: -1 })
-    .lean();
-}
+  // order.service.ts
+  async getOrdersByProfessional(professionalId: string): Promise<Order[]> {
+    return this.orderModel
+      .find({ professionalId })
+      .populate('userId', 'username email')  // ✅ Change to username
+      .sort({ createdAt: -1 })
+      .lean();
+  }
   // -----------------------------
   // GET PENDING ORDERS (For Restaurant)
   // -----------------------------
-async getPendingOrders(professionalId: string): Promise<Order[]> {
-  return this.orderModel
-    .find({ professionalId, status: OrderStatus.PENDING })
-    .populate('userId', 'username email')  // ✅
-    .sort({ createdAt: 1 })
-    .lean();
-}
+  async getPendingOrders(professionalId: string): Promise<Order[]> {
+    return this.orderModel
+      .find({ professionalId, status: OrderStatus.PENDING })
+      .populate('userId', 'username email')  // ✅
+      .sort({ createdAt: 1 })
+      .lean();
+  }
 
 
   // -----------------------------
@@ -235,58 +265,58 @@ async getPendingOrders(professionalId: string): Promise<Order[]> {
   // HELPER: Validate Status Transitions
   // -----------------------------
   private validateStatusTransition(currentStatus: OrderStatus, newStatus: OrderStatus): void {
-  // Allow keeping the same status (no-op)
-  if (currentStatus === newStatus) {
-    return; // ✅ Allow same status
+    // Allow keeping the same status (no-op)
+    if (currentStatus === newStatus) {
+      return; // ✅ Allow same status
+    }
+
+    const validTransitions: Record<OrderStatus, OrderStatus[]> = {
+      [OrderStatus.PENDING]: [OrderStatus.CONFIRMED, OrderStatus.REFUSED, OrderStatus.CANCELLED],
+      [OrderStatus.CONFIRMED]: [OrderStatus.COMPLETED, OrderStatus.CANCELLED],
+      [OrderStatus.COMPLETED]: [],
+      [OrderStatus.CANCELLED]: [],
+      [OrderStatus.REFUSED]: [],
+    };
+
+    if (!validTransitions[currentStatus]?.includes(newStatus)) {
+      throw new BadRequestException(
+        `Cannot transition from ${currentStatus} to ${newStatus}`
+      );
+    }
   }
 
-  const validTransitions: Record<OrderStatus, OrderStatus[]> = {
-    [OrderStatus.PENDING]: [OrderStatus.CONFIRMED, OrderStatus.REFUSED, OrderStatus.CANCELLED],
-    [OrderStatus.CONFIRMED]: [OrderStatus.COMPLETED, OrderStatus.CANCELLED],
-    [OrderStatus.COMPLETED]: [],
-    [OrderStatus.CANCELLED]: [],
-    [OrderStatus.REFUSED]: [],
-  };
+  async deleteOrder(orderId: string): Promise<void> {
+    const order = await this.orderModel.findById(orderId);
 
-  if (!validTransitions[currentStatus]?.includes(newStatus)) {
-    throw new BadRequestException(
-      `Cannot transition from ${currentStatus} to ${newStatus}`
-    );
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    // Only allow deletion if status is PENDING or CONFIRMED
+    if (order.status !== OrderStatus.PENDING && order.status !== OrderStatus.CONFIRMED) {
+      throw new BadRequestException('Cannot delete order with status: ' + order.status);
+    }
+
+    await this.orderModel.findByIdAndDelete(orderId);
   }
-}
 
-async deleteOrder(orderId: string): Promise<void> {
-  const order = await this.orderModel.findById(orderId);
-  
-  if (!order) {
-    throw new NotFoundException('Order not found');
+  // -----------------------------
+  // DELETE ALL ORDERS FOR USER
+  // -----------------------------
+  async deleteAllOrdersByUser(userId: string): Promise<void> {
+    await this.orderModel.deleteMany({ userId });
   }
-  
-  // Only allow deletion if status is PENDING or CONFIRMED
-  if (order.status !== OrderStatus.PENDING && order.status !== OrderStatus.CONFIRMED) {
-    throw new BadRequestException('Cannot delete order with status: ' + order.status);
+
+  // -----------------------------
+  // DELETE ALL ORDERS FOR PROFESSIONAL
+  // -----------------------------
+  async deleteAllOrdersByProfessional(professionalId: string): Promise<void> {
+    // Only delete orders with status COMPLETED
+    await this.orderModel.deleteMany({
+      professionalId,
+      status: OrderStatus.COMPLETED  // ✅ Only delete completed orders
+    });
   }
-  
-  await this.orderModel.findByIdAndDelete(orderId);
-}
-
-// -----------------------------
-// DELETE ALL ORDERS FOR USER
-// -----------------------------
-async deleteAllOrdersByUser(userId: string): Promise<void> {
-  await this.orderModel.deleteMany({ userId });
-}
-
-// -----------------------------
-// DELETE ALL ORDERS FOR PROFESSIONAL
-// -----------------------------
-async deleteAllOrdersByProfessional(professionalId: string): Promise<void> {
-  // Only delete orders with status COMPLETED
-  await this.orderModel.deleteMany({ 
-    professionalId,
-    status: OrderStatus.COMPLETED  // ✅ Only delete completed orders
-  });
-}
 
   // -----------------------------
   // CONFIRM CARD PAYMENT
@@ -298,7 +328,7 @@ async deleteAllOrdersByProfessional(professionalId: string): Promise<void> {
     console.log('⚠️ WARNING: Using legacy confirmPayment method');
     console.log('   This method requires a pre-existing PaymentMethod ID from Stripe');
     console.log('   💡 Use confirmPaymentWithCardDetails() instead if frontend sends card details');
-    
+
     try {
       // 1. Get payment from DB
       const payment = await this.paymentService.getPaymentByIntentId(paymentIntentId);
@@ -325,7 +355,7 @@ async deleteAllOrdersByProfessional(professionalId: string): Promise<void> {
         // 4. Create payment success notification for user
         if (payment.orderId) {
           const order = await this.orderModel.findById(payment.orderId);
-          
+
           try {
             await this.notificationService.createOrderNotification(
               NotificationType.PAYMENT_SUCCESS,
@@ -350,7 +380,7 @@ async deleteAllOrdersByProfessional(professionalId: string): Promise<void> {
         return { success: true };
       } else {
         await this.paymentService.updatePaymentStatus(paymentIntentId, stripeStatus.status);
-        
+
         // Create payment failed notification
         if (payment.orderId) {
           try {
@@ -368,7 +398,7 @@ async deleteAllOrdersByProfessional(professionalId: string): Promise<void> {
             console.error('Failed to create payment failed notification:', error);
           }
         }
-        
+
         throw new BadRequestException(`Payment status: ${stripeStatus.status}`);
       }
     } catch (error) {
@@ -431,7 +461,7 @@ async deleteAllOrdersByProfessional(professionalId: string): Promise<void> {
         // 4. Get and update order
         if (payment.orderId) {
           const order = await this.orderModel.findById(payment.orderId);
-          
+
           if (order) {
             // Update order status to CONFIRMED (payment succeeded)
             order.status = OrderStatus.CONFIRMED;
@@ -468,7 +498,7 @@ async deleteAllOrdersByProfessional(professionalId: string): Promise<void> {
         // Payment not succeeded
         await this.paymentService.updatePaymentStatus(paymentIntentId, stripeResult.status);
         console.log(`⚠️ Payment status: ${stripeResult.status}`);
-        
+
         // Create payment failed notification
         if (payment.orderId) {
           try {
@@ -486,7 +516,7 @@ async deleteAllOrdersByProfessional(professionalId: string): Promise<void> {
             console.error('Failed to create payment failed notification:', error);
           }
         }
-        
+
         throw new BadRequestException(`Payment status: ${stripeResult.status}`);
       }
     } catch (error) {
@@ -494,4 +524,7 @@ async deleteAllOrdersByProfessional(professionalId: string): Promise<void> {
       throw error;
     }
   }
+
+  // -----------------------------
 }
+

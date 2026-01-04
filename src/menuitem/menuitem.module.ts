@@ -5,6 +5,7 @@ import { MenuItemController } from './menuitem.controller';
 import { MenuItem, MenuItemSchema } from './schema/menuitem.schema';
 import { ImageUploadService } from './imageuploadservice';
 import { Deals, DealsSchema } from '../deals/schemas/deals.schema'; // ⭐ Import Deals
+import { GeminiModule } from '../gemini/gemini.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { Deals, DealsSchema } from '../deals/schemas/deals.schema'; // ⭐ Impor
       { name: MenuItem.name, schema: MenuItemSchema },
       { name: Deals.name, schema: DealsSchema }, // ⭐ Add Deals model
     ]),
+    GeminiModule,
   ],
   controllers: [MenuItemController],
   providers: [MenuItemService, ImageUploadService],
@@ -20,4 +22,4 @@ import { Deals, DealsSchema } from '../deals/schemas/deals.schema'; // ⭐ Impor
     MenuItemService,     // <-- Optional but recommended
   ],
 })
-export class MenuitemModule {}
+export class MenuitemModule { }

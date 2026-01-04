@@ -18,18 +18,18 @@ export class OrderItem {
   @Prop({ required: true })
   quantity: number;
 
-  @Prop({ 
-    type: [{ 
-      name: String, 
+  @Prop({
+    type: [{
+      name: String,
       isDefault: Boolean,
       intensityType: { type: String, enum: Object.values(IntensityType), required: false },
       intensityColor: { type: String, required: false },
       intensityValue: { type: Number, min: 0, max: 1, required: false } // ✅ ADD THIS
-    }], 
-    default: [] 
+    }],
+    default: []
   })
-  chosenIngredients: { 
-    name: string; 
+  chosenIngredients: {
+    name: string;
     isDefault: boolean;
     intensityType?: IntensityType;
     intensityColor?: string;
@@ -84,11 +84,43 @@ export class Order {
   @Prop()
   notes?: string; // Optional: customer notes
 
+  @Prop()
+  comment?: string; // Optional: customer comment/special request
+
   @Prop({ type: String, enum: ['CASH', 'CARD'], required: true })
   paymentMethod: 'CASH' | 'CARD';
 
   @Prop({ type: Types.ObjectId, ref: 'Payment', required: false })
   paymentId?: Types.ObjectId; // Reference to Payment document
+
+  // ===== Time Estimation Fields =====
+  @Prop({ required: false })
+  basePreparationMinutes?: number; // Sum of base preparation times for all items
+
+
+  // ===== Live Location Tracking =====
+  @Prop({
+    type: {
+      lat: { type: Number, required: true },
+      lng: { type: Number, required: true },
+      lastUpdated: { type: Date, required: true },
+      accuracy: { type: Number, required: false },
+    },
+    required: false,
+  })
+  userLocation?: {
+    lat: number;
+    lng: number;
+    lastUpdated: Date;
+    accuracy?: number;
+  };
+
+  // ===== ETA (Estimated Time of Arrival) =====
+  @Prop({ required: false })
+  estimatedArrivalTime?: Date; // When user expects to arrive
+
+  @Prop({ required: false })
+  estimatedArrivalMinutes?: number; // "I'll be there in X minutes"
 }
 
 export const OrderSchema = SchemaFactory.createForClass(Order);

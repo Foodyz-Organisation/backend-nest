@@ -18,6 +18,7 @@ import { MenuItemService } from './menuitem.service';
 import { ImageUploadService } from './imageuploadservice';
 import { MenuItem } from './schema/menuitem.schema';
 import { SupabaseStorageService } from '../common/services/supabase-storage.service';
+import { GeminiService } from '../gemini/gemini.service';
 import { CreateMenuItemDto } from './dto/create-menuitem.dto';
 import { UpdateMenuItemDto } from './dto/update-menuitem.dto';
 import { Category } from './schema/menu-category.enum';
@@ -34,7 +35,8 @@ export class MenuItemController {
   constructor(
     private readonly menuItemService: MenuItemService,
     private readonly supabaseStorageService: SupabaseStorageService,
-  ) {}
+    private readonly geminiService: GeminiService,
+  ) { }
 
   // =================================================================
   // 1. POST: Create New Menu Item (with file upload)
@@ -156,5 +158,14 @@ export class MenuItemController {
       };
     });
     return config;
+  }
+
+  // =================================================================
+  // 8. GET: Get AI Suggestions for a Menu Item
+  // =================================================================
+  @Get(':id/suggestions')
+  async getSuggestions(@Param('id') id: string) {
+    const menuItem = await this.menuItemService.findOne(id);
+    return this.geminiService.generateMenuItemSuggestions(menuItem);
   }
 }

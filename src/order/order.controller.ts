@@ -88,13 +88,13 @@ export class OrderController {
   // -----------------------------
   // DELETE ALL ORDERS FOR PROFESSIONAL
   // -----------------------------
-@Delete('professional/:professionalId')
-async deleteAllOrdersByProfessional(
-  @Param('professionalId') professionalId: string
-): Promise<{ message: string }> {
-  await this.orderService.deleteAllOrdersByProfessional(professionalId);
-  return { message: 'All completed orders deleted successfully' };
-}
+  @Delete('professional/:professionalId')
+  async deleteAllOrdersByProfessional(
+    @Param('professionalId') professionalId: string
+  ): Promise<{ message: string }> {
+    await this.orderService.deleteAllOrdersByProfessional(professionalId);
+    return { message: 'All completed orders deleted successfully' };
+  }
 
   // -----------------------------
   // DELETE SINGLE ORDER
@@ -125,17 +125,17 @@ async deleteAllOrdersByProfessional(
     console.log('📥 ========== PAYMENT CONFIRMATION REQUEST ==========');
     console.log(`📋 PaymentIntent ID: ${body.paymentIntentId}`);
     console.log(`📦 Request body keys:`, Object.keys(body));
-    
+
     // ⚠️ Detect fake PaymentMethod IDs from frontend (starts with pm_android_ or pm_ios_)
-    const isFakePaymentMethodId = body.paymentMethodId && 
-      (body.paymentMethodId.startsWith('pm_android_') || 
-       body.paymentMethodId.startsWith('pm_ios_'));
-    
+    const isFakePaymentMethodId = body.paymentMethodId &&
+      (body.paymentMethodId.startsWith('pm_android_') ||
+        body.paymentMethodId.startsWith('pm_ios_'));
+
     if (isFakePaymentMethodId) {
       console.log(`🚨 DETECTED FAKE PaymentMethod ID: ${body.paymentMethodId}`);
       console.log(`💡 Frontend must send card details instead of fake PaymentMethod ID`);
       console.log(`🔴 REQUIRED FIELDS: cardNumber, expMonth, expYear, cvc, cardholderName`);
-      
+
       throw new BadRequestException({
         message: 'Invalid PaymentMethod ID. Please send card details instead.',
         error: 'Frontend must send: cardNumber, expMonth, expYear, cvc, cardholderName',
@@ -144,7 +144,7 @@ async deleteAllOrdersByProfessional(
         receivedFields: Object.keys(body),
       });
     }
-    
+
     // Check if card details are provided (new method)
     if (body.cardNumber && body.expMonth && body.expYear && body.cvc && body.cardholderName) {
       console.log(`💳 Card Holder: ${body.cardholderName}`);
@@ -162,7 +162,7 @@ async deleteAllOrdersByProfessional(
           cardholderName: body.cardholderName,
         }
       );
-    } 
+    }
     // Legacy: Real PaymentMethod ID provided (from Stripe)
     else if (body.paymentMethodId) {
       console.log(`💳 PaymentMethod ID: ${body.paymentMethodId}`);
@@ -173,7 +173,7 @@ async deleteAllOrdersByProfessional(
     else {
       console.log(`🚨 NO PAYMENT DETAILS PROVIDED`);
       console.log(`📦 Received fields:`, Object.keys(body));
-      
+
       throw new BadRequestException({
         message: 'Missing payment details',
         error: 'Must provide either card details OR a valid Stripe PaymentMethod ID',
@@ -186,5 +186,7 @@ async deleteAllOrdersByProfessional(
     }
   }
 
-  
+
+
+
 }

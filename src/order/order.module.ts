@@ -11,6 +11,8 @@ import { StripeService } from './StripeService';
 import { CartitemModule } from 'src/cartitem/cartitem.module';
 import { OrderTrackingGateway } from '../order/websocket/order-tracking.gateway';
 import { NotificationModule } from '../notification/notification.module';
+import { GeminiModule } from '../gemini/gemini.module';
+import { MenuItem, MenuItemSchema } from '../menuitem/schema/menuitem.schema';
 
 @Module({
   imports: [
@@ -18,16 +20,18 @@ import { NotificationModule } from '../notification/notification.module';
       { name: Order.name, schema: OrderSchema },
       { name: ProfessionalAccount.name, schema: ProfessionalSchema },
       { name: Payment.name, schema: PaymentSchema },
+      { name: MenuItem.name, schema: MenuItemSchema },
     ]),
     CartitemModule,
     NotificationModule, // Import NotificationModule to use NotificationService
+    GeminiModule, // Import GeminiModule for AI time estimation
   ],
   controllers: [OrderController, PaymentController],
   providers: [
     OrderService,
     PaymentService,
     StripeService,
-    OrderTrackingGateway,   
+    OrderTrackingGateway,
   ],
   exports: [
     OrderService,
@@ -35,4 +39,4 @@ import { NotificationModule } from '../notification/notification.module';
     StripeService,
   ],
 })
-export class OrderModule {}
+export class OrderModule { }

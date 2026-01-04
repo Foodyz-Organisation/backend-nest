@@ -14,7 +14,7 @@ import { calculateDistance } from '../utils/distance.util';
 import { NotFoundException, Logger } from '@nestjs/common';
 
 @WebSocketGateway({
-  namespace: 'order-tracking', 
+  namespace: 'order-tracking',
   cors: {
     origin: '*',
   },
@@ -30,7 +30,7 @@ export class OrderTrackingGateway {
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(ProfessionalAccount.name) private professionalModel: Model<ProfessionalDocument>,
-  ) {}
+  ) { }
 
   @SubscribeMessage('join-order')
   async handleJoinOrder(
@@ -59,7 +59,7 @@ export class OrderTrackingGateway {
 
       // Get first location from professional (or use first available)
       const restaurantLocation = professional.locations?.[0];
-      
+
       if (restaurantLocation) {
         // Store restaurant location for this order
         this.restaurantLocations.set(orderId, {
@@ -82,15 +82,15 @@ export class OrderTrackingGateway {
       }
 
       // Join the order room
-    client.join(orderId);
+      client.join(orderId);
 
       this.logger.log(`Client ${client.id} (${userType}) joined order ${orderId}`);
 
       // Notify others in the room
-    this.server.to(orderId).emit('user-joined', {
-      userType,
-      clientId: client.id,
-    });
+      this.server.to(orderId).emit('user-joined', {
+        userType,
+        clientId: client.id,
+      });
     } catch (error) {
       this.logger.error(`Error in join-order: ${error.message}`, error.stack);
       client.emit('error', { message: 'Failed to join order room' });
@@ -124,7 +124,7 @@ export class OrderTrackingGateway {
 
   // User sends a location update (lat/lng)
   @SubscribeMessage('location-update')
-  handleLocationUpdate(
+  async handleLocationUpdate(
     @MessageBody()
     data: {
       orderId: string;
@@ -153,7 +153,7 @@ export class OrderTrackingGateway {
         restaurantLocation.lat,
         restaurantLocation.lon,
       );
-      
+
       // Format distance
       if (distance < 1) {
         distanceFormatted = `${Math.round(distance * 1000)} m`;
@@ -177,5 +177,60 @@ export class OrderTrackingGateway {
         name: restaurantLocation.name,
       } : null,
     });
+
+    // Persist latest location to database
+    try {
+      await this.orderModel.findByIdAndUpdate(orderId, {
+        userLocation: {
+          lat,
+          lng,
+          lastUpdated: new Date(),
+          accuracy: accuracy || null,
+        },
+      });
+    } catch (error) {
+      this.logger.error(`Failed to persist user location for order ${orderId}: ${error.message}`);
+    }
+  }
+
+  // User sets estimated arrival time
+  @SubscribeMessage('set-eta')
+  async handleSetETA(
+    @MessageBody()
+    data: {
+      orderId: string;
+      userId: string;
+      estimatedMinutes?: number;
+      estimatedArrivalTime?: Date;
+    },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const { orderId, userId, estimatedMinutes, estimatedArrivalTime } = data;
+
+    this.logger.log(`User ${userId} set ETA for order ${orderId}: ${estimatedMinutes} minutes`);
+
+    // Broadcast ETA to all clients in order room
+    this.server.to(orderId).emit('eta-update', {
+      userId,
+      estimatedMinutes: estimatedMinutes || null,
+      estimatedArrivalTime: estimatedArrivalTime || null,
+      timestamp: Date.now(),
+    });
+
+    // Persist ETA to database
+    try {
+      const updateData: any = {};
+      if (estimatedMinutes !== undefined) {
+        updateData.estimatedArrivalMinutes = estimatedMinutes;
+      }
+      if (estimatedArrivalTime) {
+        updateData.estimatedArrivalTime = estimatedArrivalTime;
+      }
+
+      await this.orderModel.findByIdAndUpdate(orderId, updateData);
+      this.logger.log(`ETA persisted to database for order ${orderId}`);
+    } catch (error) {
+      this.logger.error(`Failed to persist ETA for order ${orderId}: ${error.message}`);
+    }
   }
 }

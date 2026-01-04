@@ -27,8 +27,8 @@ class OrderItemDto {
 
   @IsArray()
   @IsOptional()
-  chosenIngredients?: { 
-    name: string; 
+  chosenIngredients?: {
+    name: string;
     isDefault: boolean;
     intensityType?: IntensityType;
     intensityColor?: string;
@@ -88,9 +88,21 @@ export class CreateOrderDto {
   notes?: string; // Optional customer notes
 
   @IsOptional()
+  @IsString()
+  comment?: string; // Optional customer comment/special request
+
+  @IsOptional()
   scheduledTime?: Date; // Optional: for future orders
 
   @IsEnum(['CASH', 'CARD'])
   @IsNotEmpty()
   paymentMethod: 'CASH' | 'CARD'; // Required: payment method selection
+
+  // ===== ETA (Estimated Time of Arrival) =====
+  @IsOptional()
+  @IsNumber()
+  estimatedArrivalMinutes?: number; // "I'll be there in X minutes"
+
+  @IsOptional()
+  estimatedArrivalTime?: Date; // When user expects to arrive
 }

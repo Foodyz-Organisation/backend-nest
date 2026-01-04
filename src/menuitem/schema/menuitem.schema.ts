@@ -32,20 +32,20 @@ export class MenuItem {
   category: Category;
 
   // Ingredients array, required
-  @Prop({ 
-    type: [{ 
-      name: String, 
-      isDefault: Boolean, 
+  @Prop({
+    type: [{
+      name: String,
+      isDefault: Boolean,
       supportsIntensity: { type: Boolean, default: false },
       intensityType: { type: String, enum: Object.values(IntensityType), required: false },
       intensityColor: { type: String, required: false }
-    }], 
-    _id: false, 
-    required: true 
+    }],
+    _id: false,
+    required: true
   })
-  ingredients: { 
-    name: string; 
-    isDefault: boolean; 
+  ingredients: {
+    name: string;
+    isDefault: boolean;
     supportsIntensity: boolean;
     intensityType?: IntensityType;
     intensityColor?: string;
@@ -54,10 +54,14 @@ export class MenuItem {
   // Options array, required
   @Prop({ type: [{ name: String, price: Number }], _id: false, required: true })
   options: { name: string; price: number }[];
-  
+
   // Image path/URL
   @Prop()
   image?: string;
+
+  // Preparation time in minutes (base time for this dish)
+  @Prop({ required: true, default: 15, min: 1 })
+  preparationTimeMinutes: number;
 }
 
 export const MenuItemSchema = SchemaFactory.createForClass(MenuItem);
