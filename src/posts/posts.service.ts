@@ -103,37 +103,76 @@ export class PostsService {
     }
 
     // Part 2: Food Category Matching - Validate user-selected category against AI prediction
-    // This runs asynchronously and doesn't block post creation, but logs warnings for mismatches
+    // This runs synchronously and includes results in the response
+    let categoryValidation: any = null;
+    
     if (savedPost.mediaUrls && savedPost.mediaUrls.length > 0) {
       const primaryImageUrl = savedPost.mediaUrls[0];
       
-      // Run category matching in background (non-blocking)
-      this.foodCategoryMatchingService
-        .matchCategory(savedPost.foodType, undefined, primaryImageUrl)
-        .then((matchingResult) => {
-          if (matchingResult.matchStatus === 'MISMATCH' && matchingResult.suggestedCategory) {
-            console.warn(
-              `[Food Category Matching] ⚠️ Post ${savedPost._id}: ` +
-              `User selected "${savedPost.foodType}" but AI detected "${matchingResult.suggestedCategory}" ` +
-              `(confidence: ${(matchingResult.confidence * 100).toFixed(1)}%). ` +
-              `Consider suggesting category update to user.`
-            );
-          } else if (matchingResult.matchStatus === 'MATCH') {
-            console.log(
-              `[Food Category Matching] ✅ Post ${savedPost._id}: ` +
-              `Category "${savedPost.foodType}" validated successfully ` +
-              `(confidence: ${(matchingResult.confidence * 100).toFixed(1)}%)`
-            );
-          }
-        })
-        .catch((error) => {
-          // Log error but don't fail post creation
+      try {
+        // Run category matching synchronously (await instead of .then())
+        const matchingResult = await this.foodCategoryMatchingService.matchCategory(
+          savedPost.foodType,
+          undefined,
+          primaryImageUrl
+        );
+        
+        // Log results for monitoring
+        if (matchingResult.matchStatus === 'MISMATCH' && matchingResult.suggestedCategory) {
           console.warn(
-            `[Food Category Matching] ⚠️ Failed to validate category for post ${savedPost._id}: ${error.message}`
+            `[Food Category Matching] ⚠️ Post ${savedPost._id}: ` +
+            `User selected "${savedPost.foodType}" but AI detected "${matchingResult.suggestedCategory}" ` +
+            `(confidence: ${(matchingResult.confidence * 100).toFixed(1)}%)`
           );
-        });
+        } else if (matchingResult.matchStatus === 'MATCH') {
+          console.log(
+            `[Food Category Matching] ✅ Post ${savedPost._id}: ` +
+            `Category "${savedPost.foodType}" validated successfully ` +
+            `(confidence: ${(matchingResult.confidence * 100).toFixed(1)}%)`
+          );
+        }
+        
+        // Format categoryValidation according to exact specification
+        categoryValidation = {
+          matchStatus: matchingResult.matchStatus, // "MATCH", "MISMATCH", or "UNCERTAIN"
+          userSelectedCategory: matchingResult.userSelectedCategory,
+          aiPredictedCategories: matchingResult.aiPredictedCategories.map(pred => ({
+            category: pred.category,
+            confidence: pred.confidence,
+            matchedLabels: pred.matchedLabels,
+          })),
+          suggestedCategory: matchingResult.suggestedCategory,
+          confidence: matchingResult.confidence,
+          detectionMethod: matchingResult.detectionMethod,
+        };
+      } catch (error: any) {
+        // Log error but don't fail post creation - return UNCERTAIN status
+        console.warn(
+          `[Food Category Matching] ⚠️ Failed to validate category for post ${savedPost._id}: ${error.message}`
+        );
+        
+        // Return UNCERTAIN status if validation fails
+        categoryValidation = {
+          matchStatus: 'UNCERTAIN',
+          userSelectedCategory: savedPost.foodType,
+          aiPredictedCategories: [],
+          suggestedCategory: null,
+          confidence: 0.0,
+          detectionMethod: 'fallback',
+        };
+      }
+    } else {
+      // No media URLs - return UNCERTAIN
+      categoryValidation = {
+        matchStatus: 'UNCERTAIN',
+        userSelectedCategory: savedPost.foodType,
+        aiPredictedCategories: [],
+        suggestedCategory: null,
+        confidence: 0.0,
+        detectionMethod: 'fallback',
+      };
     }
-
+    
     // Create notification for post creation (notify followers)
     // Note: You can enhance this to fetch followers and notify them individually
     try {
@@ -159,7 +198,17 @@ export class PostsService {
       // Don't fail the post creation if notification fails
     }
 
-    return populatedPost as PostDocument; // Assert type here
+    // Convert Mongoose document to plain object and add categoryValidation
+    // Mongoose documents don't serialize custom properties, so we need to convert to object first
+    const postObject = populatedPost.toObject ? populatedPost.toObject() : { ...populatedPost };
+    const responseWithValidation = {
+      ...postObject,
+      categoryValidation: categoryValidation,
+    };
+
+    // Return as PostDocument (the categoryValidation will be included in JSON serialization)
+    // Using 'any' cast because we're adding a custom field not in the schema
+    return responseWithValidation as any as PostDocument;
   }
 
   async uploadFiles(files: MulterFile[]): Promise<UploadResponseDto> {
