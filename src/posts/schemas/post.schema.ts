@@ -24,7 +24,7 @@ export enum FoodType {
   SANDWICHES = 'SANDWICHES',
   SOUPS = 'SOUPS',
   
-  // Dietary and Flavor
+  // Dietary and Flavorclear
   SALAD = 'SALAD',
   VEGETARIAN = 'VEGETARIAN',
   VEGAN = 'VEGAN',

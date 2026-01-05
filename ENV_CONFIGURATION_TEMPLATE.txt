@@ -28,6 +28,29 @@ GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"your-project
 # GOOGLE_APPLICATION_CREDENTIALS=./config/google-credentials.json
 
 # ================================================
+# GOOGLE CLOUD VISION (for Food Detection)
+# Separate credentials for food image detection and category matching
+# ================================================
+# Path to service account JSON credentials file for food detection
+FOOD_DETECTION_CREDENTIALS=./config/food-detection-credentials.json
+
+# ================================================
+# CLARIFAI API (for Food Detection - Recommended Free Alternative)
+# ================================================
+# Get your API key from: https://portal.clarifai.com/settings/profile
+# Free tier: 1,000 requests/month (no credit card required)
+# More reliable than Hugging Face Inference API
+CLARIFAI_API_KEY=your_clarifai_api_key_here
+
+# ================================================
+# HUGGING FACE INFERENCE API (for Food Detection - Backup Free Alternative)
+# ================================================
+# Get your token from: https://huggingface.co/settings/tokens
+# Free tier: 1,000 requests/month (no credit card required)
+# Note: Many models return 410 errors - Clarifai is more reliable
+HUGGING_FACE_API_TOKEN=your_huggingface_token_here
+
+# ================================================
 # SUPABASE STORAGE (for License Images)
 # ================================================
 SUPABASE_URL=https://your-project.supabase.co

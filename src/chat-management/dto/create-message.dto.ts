@@ -9,7 +9,7 @@ export class CreateMessageDto {
 
   @IsOptional()
   @IsString()
-  type?: 'text' | 'image' | 'file';
+  type?: 'text' | 'image' | 'file' | 'post' | 'shared_post';
 
   @IsOptional()
   meta?: Record<string, any>;

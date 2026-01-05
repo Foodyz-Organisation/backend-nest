@@ -19,11 +19,16 @@ export class Message {
   // - 'image': Image message
   // - 'file': File message
   // - 'post': Shared post message (meta contains post details)
-  @Prop({ type: String, enum: ['text', 'image', 'file', 'post'], default: 'text' })
+  // - 'shared_post': Shared post message (alias for frontend compatibility)
+  @Prop({ type: String, enum: ['text', 'image', 'file', 'post', 'shared_post'], default: 'text' })
   type: string;
 
   // Meta field usage:
-  // For type='post', meta contains: { postId, postCaption, postMediaUrls, postMediaType, 
+  // For type='post' or 'shared_post', meta must contain:
+  // - sharedPostId (string): The MongoDB _id of the shared post
+  // - sharedPostCaption (string): The post's caption text
+  // - sharedPostImage (string): Relative path to image/thumbnail
+  // Optional fields: { postId, postCaption, postMediaUrls, postMediaType, 
   // postFoodType, postThumbnailUrl, postOwner: { id, name, avatarUrl }, price, preparationTime,
   // likeCount, commentCount, saveCount }
   @Prop({ type: Object, default: {} })

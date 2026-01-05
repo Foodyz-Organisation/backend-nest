@@ -26,6 +26,8 @@ import { NotificationType } from '../notification/schema/notification.schema';
 import { InteractionService } from './interaction.service';
 import { SupabaseStorageService } from '../common/services/supabase-storage.service';
 import { ChatManagementService } from '../chat-management/chat-management.service';
+import { FoodDetectionService } from '../common/services/food-detection.service';
+import { FoodCategoryMatchingService } from '../common/services/food-category-matching.service';
 
 type MulterFile = Express.Multer.File;
 
@@ -49,6 +51,8 @@ export class PostsService {
     private interactionService: InteractionService,
     private supabaseStorageService: SupabaseStorageService,
     private chatManagementService: ChatManagementService,
+    private foodDetectionService: FoodDetectionService,
+    private foodCategoryMatchingService: FoodCategoryMatchingService,
   ) {}
 
   /**
@@ -98,6 +102,38 @@ export class PostsService {
       }
     }
 
+    // Part 2: Food Category Matching - Validate user-selected category against AI prediction
+    // This runs asynchronously and doesn't block post creation, but logs warnings for mismatches
+    if (savedPost.mediaUrls && savedPost.mediaUrls.length > 0) {
+      const primaryImageUrl = savedPost.mediaUrls[0];
+      
+      // Run category matching in background (non-blocking)
+      this.foodCategoryMatchingService
+        .matchCategory(savedPost.foodType, undefined, primaryImageUrl)
+        .then((matchingResult) => {
+          if (matchingResult.matchStatus === 'MISMATCH' && matchingResult.suggestedCategory) {
+            console.warn(
+              `[Food Category Matching] ⚠️ Post ${savedPost._id}: ` +
+              `User selected "${savedPost.foodType}" but AI detected "${matchingResult.suggestedCategory}" ` +
+              `(confidence: ${(matchingResult.confidence * 100).toFixed(1)}%). ` +
+              `Consider suggesting category update to user.`
+            );
+          } else if (matchingResult.matchStatus === 'MATCH') {
+            console.log(
+              `[Food Category Matching] ✅ Post ${savedPost._id}: ` +
+              `Category "${savedPost.foodType}" validated successfully ` +
+              `(confidence: ${(matchingResult.confidence * 100).toFixed(1)}%)`
+            );
+          }
+        })
+        .catch((error) => {
+          // Log error but don't fail post creation
+          console.warn(
+            `[Food Category Matching] ⚠️ Failed to validate category for post ${savedPost._id}: ${error.message}`
+          );
+        });
+    }
+
     // Create notification for post creation (notify followers)
     // Note: You can enhance this to fetch followers and notify them individually
     try {
@@ -127,6 +163,56 @@ export class PostsService {
   }
 
   async uploadFiles(files: MulterFile[]): Promise<UploadResponseDto> {
+    // Part 1: Food Detection - Validate that all uploaded files contain food-related content
+    for (const file of files) {
+      // Only validate image files (skip videos for now, or extract frame for validation)
+      if (file.mimetype.startsWith('image/')) {
+        try {
+          const foodDetectionResult = await this.foodDetectionService.detectFood(file.buffer);
+          
+          if (!foodDetectionResult.isFood) {
+            throw new BadRequestException(
+              `The uploaded image "${file.originalname}" does not appear to contain food-related content. ` +
+              `Please upload images of food items only. ` +
+              `(Confidence: ${(foodDetectionResult.confidence * 100).toFixed(1)}%)`
+            );
+          }
+
+          // Log successful food detection (optional, for monitoring)
+          console.log(
+            `[Food Detection] ✅ Image "${file.originalname}" validated as food ` +
+            `(confidence: ${(foodDetectionResult.confidence * 100).toFixed(1)}%)`
+          );
+        } catch (error: any) {
+          // If it's already a BadRequestException (non-food detected), re-throw it
+          if (error instanceof BadRequestException && error.message.includes('does not appear to contain food')) {
+            throw error;
+          }
+          
+          // Check if it's a billing error
+          if (error?.code === 7 || error?.message?.includes('billing')) {
+            console.warn(
+              `[Food Detection] ⚠️ Billing not enabled for Google Cloud Vision API. ` +
+              `Allowing upload (fallback mode). ` +
+              `Please enable billing to activate food detection: ` +
+              `https://console.developers.google.com/billing/enable?project=YOUR_PROJECT_ID`
+            );
+            // Allow upload in fallback mode
+            continue;
+          }
+          
+          // For other errors (e.g., API unavailable), log warning but allow upload
+          // This provides graceful degradation
+          console.warn(
+            `[Food Detection] ⚠️ Could not validate food content for "${file.originalname}": ${error.message}. ` +
+            `Allowing upload (fallback mode).`
+          );
+        }
+      }
+      // Note: For video files, we could extract a frame and validate it,
+      // but for now we'll validate during post creation using the thumbnail
+    }
+
     // Upload files to Supabase Storage in the 'posts' folder
     const urls = await this.supabaseStorageService.uploadFiles(files, 'posts');
     return { urls };
@@ -937,14 +1023,19 @@ async createComment(
       : post.mediaUrls[0];  // For images, use first image
 
     // 6. Send the message with post data embedded in meta
-    // The message type 'post' tells frontend to render the post image instead of text
+    // The message type 'shared_post' tells frontend to render the post image card
     const sharedMessage = await this.chatManagementService.sendMessage({
       conversationId: (conversation._id as Types.ObjectId).toString(),
       senderId: senderId.toString(),
       content: messageContent,  // Empty unless user added custom text
-      type: 'post', // Special type to indicate this is a shared post
+      type: 'shared_post', // Special type to indicate this is a shared post
       meta: {
-        // Flag to easily identify shared posts
+        // ⚠️ CRITICAL: THREE REQUIRED FIELDS FOR FRONTEND
+        sharedPostId: post._id.toString(),
+        sharedPostCaption: post.caption,
+        sharedPostImage: postPrimaryImageUrl, // Relative path (e.g., "uploads/posts/image.jpg")
+        
+        // Additional metadata for enhanced functionality
         isSharedPost: true,
         
         // Shared by information
@@ -954,14 +1045,12 @@ async createComment(
           model: senderModel,
         },
         
-        // Post identification
+        // Legacy field name support (for backwards compatibility)
         postId: post._id.toString(),
-        
-        // Primary image for display (easy access for frontend)
         postPrimaryImageUrl: postPrimaryImageUrl,
+        postCaption: post.caption,
         
         // Complete post data
-        postCaption: post.caption,
         postMediaUrls: post.mediaUrls,
         postMediaType: post.mediaType,
         postFoodType: post.foodType,
@@ -1025,7 +1114,7 @@ async createComment(
         },
         sharedMessage: {
           id: (sharedMessage._id as Types.ObjectId).toString(),
-          type: 'post',
+          type: 'shared_post',
           content: messageContent,
           meta: sharedMessage.meta,
           createdAt: sharedMessage.createdAt,

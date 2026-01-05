@@ -6,7 +6,7 @@ export class SendMessageDto {
 
   @IsOptional()
   @IsString()
-  type?: 'text' | 'image' | 'file' | 'post';
+  type?: 'text' | 'image' | 'file' | 'post' | 'shared_post';
   @IsOptional()
   meta?: Record<string, any>;
 }

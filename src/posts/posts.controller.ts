@@ -34,12 +34,22 @@ import { UploadResponseDto } from './dto/upload-response.dto';
 import { CreateCommentDto } from './dto/create-comment.dto'; // Ensure this is imported if used
 import { Comment as CommentSchema } from './schemas/comment.schema'; // <-- Import CommentSchema for response types
 import { SharePostDto } from './dto/share-post.dto';
+import { FoodDetectionService } from '../common/services/food-detection.service';
+import { FoodCategoryMatchingService } from '../common/services/food-category-matching.service';
+import { ClarifaiFoodDetectionService } from '../common/services/clarifai-food-detection.service';
+import { HuggingFaceFoodDetectionService } from '../common/services/huggingface-food-detection.service';
 
 
 @ApiTags('posts')
 @Controller('posts')
 export class PostsController {
-  constructor(private readonly postsService: PostsService) {}
+  constructor(
+    private readonly postsService: PostsService,
+    private readonly foodDetectionService: FoodDetectionService,
+    private readonly foodCategoryMatchingService: FoodCategoryMatchingService,
+    private readonly clarifaiService: ClarifaiFoodDetectionService,
+    private readonly huggingFaceService: HuggingFaceFoodDetectionService,
+  ) {}
 
   // --- 1. File Upload Endpoint ---
   @Post('uploads')
@@ -67,8 +77,9 @@ export class PostsController {
     FilesInterceptor('files', 10, {
       storage: memoryStorage(),
       fileFilter: (req, file, cb) => {
-        if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|mp4|mov|avi|wmv)$/)) {
-          return cb(new BadRequestException('Only image and video files are allowed!'), false);
+        // Accepted formats: images (jpg, jpeg, png, gif, webp, bmp, svg) and videos (mp4, mov, avi, wmv, webm, mkv, flv) and PDFs
+        if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp|bmp|svg\+xml|mp4|mov|avi|wmv|webm|mkv|flv|pdf)$/)) {
+          return cb(new BadRequestException('Only image, video, and PDF files are allowed!'), false);
         }
         cb(null, true);
       },
@@ -518,11 +529,11 @@ export class PostsController {
   @Post(':id/share')
   @ApiOperation({ 
     summary: 'Share a post with another user via chat',
-    description: 'Creates or uses an existing private conversation to share a post with a recipient user. The post is sent as a message with type "post" containing the post image and data. The message content is empty by default (unless a custom message is provided), so the frontend displays the actual post image instead of text like "Shared a post with you".'
+    description: 'Creates or uses an existing private conversation to share a post with a recipient user. The post is sent as a message with type "shared_post" containing the post image and data. The message includes three critical meta fields (sharedPostId, sharedPostCaption, sharedPostImage) that enable the frontend to display the post as an image card instead of text.'
   })
   @ApiResponse({ 
     status: 201, 
-    description: 'Post shared successfully. The message contains the post image in meta.postPrimaryImageUrl for easy display.',
+    description: 'Post shared successfully. The message contains type="shared_post" with meta.sharedPostImage for display as an image card.',
     schema: {
       type: 'object',
       properties: {
@@ -541,14 +552,17 @@ export class PostsController {
             },
             sharedMessage: { 
               type: 'object',
-              description: 'The message with type "post" and post data in meta',
+              description: 'The message with type "shared_post" and post data in meta',
               properties: {
                 id: { type: 'string' },
-                type: { type: 'string', example: 'post' },
+                type: { type: 'string', example: 'shared_post' },
                 content: { type: 'string', description: 'Empty unless user provided custom message' },
                 meta: {
                   type: 'object',
                   properties: {
+                    sharedPostId: { type: 'string', description: 'The MongoDB _id of the shared post' },
+                    sharedPostCaption: { type: 'string', description: 'The post caption text' },
+                    sharedPostImage: { type: 'string', description: 'Relative path to image/thumbnail (e.g., uploads/posts/image.jpg)' },
                     isSharedPost: { type: 'boolean', example: true },
                     postId: { type: 'string' },
                     postPrimaryImageUrl: { type: 'string', description: 'Main image to display' },
@@ -621,6 +635,172 @@ export class PostsController {
       throw new BadRequestException('Invalid post ID format.');
     }
     return this.postsService.getComments(new Types.ObjectId(postId)); // <-- Pass ObjectId
+  }
+
+  // =======================================================================
+  // --- FOOD DETECTION TEST ENDPOINTS ---
+  // =======================================================================
+
+  // --- Test Food Detection Service Health ---
+  @Get('test/food-detection/health')
+  @ApiOperation({ 
+    summary: 'Test food detection service health',
+    description: 'Check if the food detection service is properly configured and available'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Service health status',
+    schema: {
+      type: 'object',
+      properties: {
+        foodDetection: {
+          type: 'object',
+          properties: {
+            status: { type: 'string' },
+            available: { type: 'boolean' },
+            credentialsConfigured: { type: 'boolean' }
+          }
+        },
+        categoryMatching: {
+          type: 'object',
+          properties: {
+            status: { type: 'string' },
+            available: { type: 'boolean' },
+            credentialsConfigured: { type: 'boolean' }
+          }
+        }
+      }
+    }
+  })
+  async testFoodDetectionHealth() {
+    const foodDetectionHealth = await this.foodDetectionService.healthCheck();
+    const categoryMatchingHealth = await this.foodCategoryMatchingService.healthCheck();
+    const clarifaiHealth = await this.clarifaiService.healthCheck();
+    const huggingFaceHealth = await this.huggingFaceService.healthCheck();
+    
+    return {
+      primary: {
+        service: 'Clarifai API',
+        status: clarifaiHealth.status,
+        available: clarifaiHealth.available,
+        apiKeyConfigured: clarifaiHealth.apiKeyConfigured,
+        foodModel: clarifaiHealth.foodModel,
+      },
+      secondary: {
+        service: 'Hugging Face Inference API',
+        status: huggingFaceHealth.status,
+        available: huggingFaceHealth.available,
+        tokenConfigured: huggingFaceHealth.tokenConfigured,
+        model: huggingFaceHealth.model,
+      },
+      fallback: {
+        service: 'Google Cloud Vision API',
+        status: foodDetectionHealth.status,
+        available: foodDetectionHealth.available,
+        credentialsConfigured: foodDetectionHealth.credentialsConfigured,
+      },
+      categoryMatching: categoryMatchingHealth,
+      message: clarifaiHealth.available 
+        ? 'Food detection services are ready! ✅ (Using Clarifai - Free & Reliable)' 
+        : huggingFaceHealth.available
+        ? 'Food detection services are ready! ✅ (Using Hugging Face - Free)'
+        : 'Food detection in fallback mode. Add CLARIFAI_API_KEY or HUGGING_FACE_API_TOKEN to enable.',
+    };
+  }
+
+  // --- Test Food Detection with Image URL ---
+  @Post('test/food-detection/detect')
+  @ApiOperation({ 
+    summary: 'Test food detection on an image URL',
+    description: 'Test if an image contains food-related content. Provide an image URL to test.'
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        imageUrl: {
+          type: 'string',
+          description: 'URL of the image to test',
+          example: 'https://example.com/food-image.jpg'
+        }
+      },
+      required: ['imageUrl']
+    }
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Food detection result',
+    schema: {
+      type: 'object',
+      properties: {
+        isFood: { type: 'boolean' },
+        confidence: { type: 'number' },
+        labels: { type: 'array' },
+        detectionMethod: { type: 'string' }
+      }
+    }
+  })
+  async testFoodDetection(@Body() body: { imageUrl: string }) {
+    if (!body.imageUrl) {
+      throw new BadRequestException('imageUrl is required');
+    }
+    
+    return await this.foodDetectionService.detectFood(undefined, body.imageUrl);
+  }
+
+  // --- Test Category Matching with Image URL ---
+  @Post('test/category-matching/match')
+  @ApiOperation({ 
+    summary: 'Test category matching on an image URL',
+    description: 'Test if the AI-predicted category matches a user-selected category. Provide an image URL and food type to test.'
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        imageUrl: {
+          type: 'string',
+          description: 'URL of the image to test',
+          example: 'https://example.com/pizza-image.jpg'
+        },
+        foodType: {
+          type: 'string',
+          enum: Object.values(FoodType),
+          description: 'The food category selected by the user',
+          example: FoodType.PIZZA
+        }
+      },
+      required: ['imageUrl', 'foodType']
+    }
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Category matching result',
+    schema: {
+      type: 'object',
+      properties: {
+        userSelectedCategory: { type: 'string' },
+        aiPredictedCategories: { type: 'array' },
+        matchStatus: { type: 'string', enum: ['MATCH', 'MISMATCH', 'UNCERTAIN'] },
+        suggestedCategory: { type: 'string', nullable: true },
+        confidence: { type: 'number' },
+        detectionMethod: { type: 'string' }
+      }
+    }
+  })
+  async testCategoryMatching(@Body() body: { imageUrl: string; foodType: FoodType }) {
+    if (!body.imageUrl) {
+      throw new BadRequestException('imageUrl is required');
+    }
+    if (!body.foodType || !Object.values(FoodType).includes(body.foodType)) {
+      throw new BadRequestException('foodType must be a valid FoodType enum value');
+    }
+    
+    return await this.foodCategoryMatchingService.matchCategory(
+      body.foodType,
+      undefined,
+      body.imageUrl
+    );
   }
 
   
