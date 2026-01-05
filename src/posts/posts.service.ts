@@ -460,28 +460,40 @@ async update(
         throw new ForbiddenException('You are not authorized to update this post.');
     }
 
-    if (updatePostDto.caption === undefined) {
-        throw new BadRequestException('No valid fields provided for update. Only "caption" can be updated.');
+    // Build update object with only provided fields
+    const updateData: any = {};
+    
+    if (updatePostDto.caption !== undefined) {
+      updateData.caption = updatePostDto.caption;
+    }
+    
+    if (updatePostDto.foodType !== undefined) {
+      updateData.foodType = updatePostDto.foodType;
     }
 
-     const updatedPost = await this.postModel.findByIdAndUpdate(
+    // Validate that at least one field is provided
+    if (Object.keys(updateData).length === 0) {
+        throw new BadRequestException('No valid fields provided for update. Only "caption" and "foodType" can be updated.');
+    }
+
+    const updatedPost = await this.postModel.findByIdAndUpdate(
       id,
-      { caption: updatePostDto.caption },
+      { $set: updateData },
       { new: true, runValidators: true },
-    ).exec(); // Exec without populate for now
+    ).exec();
 
     if (!updatedPost) {
       throw new NotFoundException(`Post with ID "${id}" not found after update attempt.`);
     }
     
-    // Now populate on the updated document
+    // Populate the updated document
     await updatedPost.populate({
         path: 'ownerId',
-        model: updatedPost.ownerModel, // <-- RE-INTRODUCED
+        model: updatedPost.ownerModel,
         select: '_id username fullName profilePictureUrl followerCount followingCount email professionalData.fullName professionalData.licenseNumber professionalData.profilePictureUrl'
     });
 
-    return updatedPost as PostDocument; // Added as PostDocument
+    return updatedPost as PostDocument;
   }
 
 
