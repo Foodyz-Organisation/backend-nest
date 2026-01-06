@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsString, IsOptional, IsNotEmpty, IsMongoId, IsArray, ValidateNested, IsNumber } from 'class-validator';
+import { IsEmail, IsString, IsOptional, IsNotEmpty, IsMongoId, IsArray, ValidateNested, IsNumber, MinLength, IsStrongPassword } from 'class-validator';
 import { Type } from 'class-transformer';
 
 class LocationDto {
@@ -26,35 +26,45 @@ class LocationDto {
 
 export class ProfessionalSignupDto {
   @ApiProperty({ description: 'Email address of the professional', example: 'pro@example.com' })
-  @IsEmail()
-  @IsNotEmpty()
+  @IsEmail({}, { message: 'Invalid email address' })
+  @IsNotEmpty({ message: 'Email is required' })
   email: string;
 
   @ApiProperty({ description: 'Password for the account', example: 'StrongP@ss123' })
-  @IsString()
-  @IsNotEmpty()
+  @IsString({ message: 'Password must be a string' })
+  @IsNotEmpty({ message: 'Password is required' })
+  @IsStrongPassword({
+    minLength: 8,
+    minLowercase: 1,
+    minUppercase: 1,
+    minNumbers: 1,
+    minSymbols: 1,
+  }, {
+    message: 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character'
+  })
   password: string;
 
   @ApiProperty({ description: 'Full name of the professional', example: 'John Doe' })
-  @IsString()
-  @IsNotEmpty()
+  @IsString({ message: 'Full name must be a string' })
+  @IsNotEmpty({ message: 'Full name is required' })
+  @MinLength(2, { message: 'Full name must be at least 2 characters long' })
   fullName: string;
 
-  @ApiProperty({ 
-    description: 'Optional restaurant permit number (will be auto-extracted from image)', 
-    example: 'N° 12345' 
+  @ApiProperty({
+    description: 'Optional restaurant permit number (will be auto-extracted from image)',
+    example: 'N° 12345'
   })
   @IsOptional()
   @IsString()
   licenseNumber?: string;
 
-  @ApiProperty({ 
-    description: 'Base64 encoded restaurant permit image - "Autorisation d\'exploitation d\'un restaurant" (required for validation)', 
+  @ApiProperty({
+    description: 'Base64 encoded restaurant permit image - "Autorisation d\'exploitation d\'un restaurant" (required for validation)',
     example: 'data:image/jpeg;base64,/9j/4AAQSkZJRg...',
     required: true
   })
-  @IsNotEmpty()
-  @IsString()
+  @IsNotEmpty({ message: 'Restaurant permit image is required' })
+  @IsString({ message: 'License image must be a string' })
   licenseImage: string; // Base64 encoded restaurant permit image
 
   @ApiProperty({ description: 'Optional uploaded documents (file paths)', example: ['/uploads/license.pdf'] })

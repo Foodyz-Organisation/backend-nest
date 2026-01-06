@@ -26,17 +26,15 @@ export class AuthService {
     private configService: ConfigService,
     private licenseValidator: TunisianLicenseValidatorService,
     private supabaseStorage: SupabaseStorageService,
-  ) {}
+  ) { }
 
   // ================= User Signup =================
   async userSignup(userData: SignupDto) {
     if (!userData.password) throw new BadRequestException('Password is required');
     const normalizedEmail = userData.email.trim().toLowerCase();
-    
-    // Vérifier si l'email existe déjà
-    const exists = await this.userModel.findOne({ email: normalizedEmail }).exec();
-    if (exists) throw new BadRequestException('Email already registered');
-    
+    // Vérifier si l'email existe déjà (User or Professional)
+    await this.checkEmailUniqueness(normalizedEmail);
+
     const hashed = await bcrypt.hash(userData.password, 10);
     const newUser = new this.userModel({
       ...userData,
@@ -54,19 +52,18 @@ export class AuthService {
   async professionalSignup(profData: ProfessionalSignupDto) {
     if (!profData.password) throw new BadRequestException('Password is required');
     if (!profData.licenseImage) throw new BadRequestException('Restaurant permit image is required');
-    
+
     const normalizedEmail = profData.email.trim().toLowerCase();
-    
-    // Check if email already exists
-    const exists = await this.profModel.findOne({ email: normalizedEmail }).exec();
-    if (exists) throw new BadRequestException('Email already registered');
-    
+
+    // Check if email already exists (User or Professional)
+    await this.checkEmailUniqueness(normalizedEmail);
+
     console.log('🚀 Starting professional signup with restaurant permit validation...');
-    
+
     // Step 1: Validate the restaurant permit image using OCR
     console.log('📸 Validating Tunisian restaurant operation permit...');
     const validationResult = await this.licenseValidator.validateLicenseFromBase64(profData.licenseImage);
-    
+
     // Step 2: Check if permit is valid
     if (!validationResult.isValid) {
       console.log('❌ Restaurant permit validation failed:', validationResult.reason);
@@ -79,11 +76,11 @@ export class AuthService {
         }
       });
     }
-    
+
     console.log('✅ Restaurant permit validated successfully!');
     console.log(`📋 Permit Number: ${validationResult.licenseNumber}`);
     console.log(`🎯 Confidence: ${validationResult.confidence}`);
-    
+
     // Step 3: Upload restaurant permit image to Supabase
     console.log('☁️ Uploading restaurant permit image to Supabase...');
     const licenseImageUrl = await this.supabaseStorage.uploadBase64Image(
@@ -91,10 +88,10 @@ export class AuthService {
       'restaurant-permits' // folder name in Supabase
     );
     console.log('✅ Restaurant permit image uploaded:', licenseImageUrl);
-    
+
     // Step 4: Hash password and create professional account
     const hashed = await bcrypt.hash(profData.password, 10);
-    
+
     const newProf = new this.profModel({
       email: normalizedEmail,
       password: hashed,
@@ -117,13 +114,13 @@ export class AuthService {
         ? new Types.ObjectId(profData.linkedUserId)
         : undefined,
     });
-    
+
     await newProf.save();
-    
+
     console.log('✅ Professional account created successfully:', normalizedEmail);
     console.log(`📋 Restaurant Permit Number: ${validationResult.licenseNumber}`);
-    
-    return { 
+
+    return {
       message: 'Professional account registered successfully',
       permitNumber: validationResult.licenseNumber,
       confidence: validationResult.confidence,
@@ -134,104 +131,104 @@ export class AuthService {
 
 
   // ================= Login ================= ✅ CORRIGÉ
- async login(loginData: LoginDto) {
-  const { email, password } = loginData;
-  const normalizedEmail = email.trim().toLowerCase();
+  async login(loginData: LoginDto) {
+    const { email, password } = loginData;
+    const normalizedEmail = email.trim().toLowerCase();
 
-  console.log('🔐 Login attempt for:', normalizedEmail);
+    console.log('🔐 Login attempt for:', normalizedEmail);
 
-  // 1. Chercher dans les users
-  let account: UserDocument | ProfessionalDocument | null =
-    await this.userModel.findOne({ email: normalizedEmail }).exec();
-  let role: 'user' | 'professional' = 'user';
+    // 1. Chercher dans les users
+    let account: UserDocument | ProfessionalDocument | null =
+      await this.userModel.findOne({ email: normalizedEmail }).exec();
+    let role: 'user' | 'professional' = 'user';
 
-  // 2. Si pas trouvé, chercher dans les professionals
-  if (!account) {
-    account = await this.profModel.findOne({ email: normalizedEmail }).exec();
-    role = 'professional';
-  }
+    // 2. Si pas trouvé, chercher dans les professionals
+    if (!account) {
+      account = await this.profModel.findOne({ email: normalizedEmail }).exec();
+      role = 'professional';
+    }
 
-  // 3. Vérifications
-  if (!account) {
-    console.log('❌ Account not found:', normalizedEmail);
-    throw new UnauthorizedException('Invalid credentials');
-  }
+    // 3. Vérifications
+    if (!account) {
+      console.log('❌ Account not found:', normalizedEmail);
+      throw new UnauthorizedException('Invalid credentials');
+    }
 
-  if (!account.isActive) {
-    console.log('❌ Account deactivated:', normalizedEmail);
-    throw new UnauthorizedException('Account is deactivated');
-  }
+    if (!account.isActive) {
+      console.log('❌ Account deactivated:', normalizedEmail);
+      throw new UnauthorizedException('Account is deactivated');
+    }
 
-  // 4. Vérifier le mot de passe
-  const isPasswordValid = await bcrypt.compare(password, account.password);
-  if (!isPasswordValid) {
-    console.log('❌ Invalid password for:', normalizedEmail);
-    throw new UnauthorizedException('Invalid credentials');
-  }
+    // 4. Vérifier le mot de passe
+    const isPasswordValid = await bcrypt.compare(password, account.password);
+    if (!isPasswordValid) {
+      console.log('❌ Invalid password for:', normalizedEmail);
+      throw new UnauthorizedException('Invalid credentials');
+    }
 
-  console.log('✅ Password valid for:', normalizedEmail);
+    console.log('✅ Password valid for:', normalizedEmail);
 
-  // --- Helper type guard to check if this is a user account ---
-  const isUserAccount = (acc: UserDocument | ProfessionalDocument): acc is UserDocument => {
-    return 'username' in acc || 'nomPrenom' in acc;
-  };
+    // --- Helper type guard to check if this is a user account ---
+    const isUserAccount = (acc: UserDocument | ProfessionalDocument): acc is UserDocument => {
+      return 'username' in acc || 'nomPrenom' in acc;
+    };
 
-  // 5. Extraire le username selon le type de compte
-  let username: string;
+    // 5. Extraire le username selon le type de compte
+    let username: string;
 
-  if (isUserAccount(account)) {
-    // 👤 User account
-    username = account.fullName || account.username || account.email.split('@')[0];
-    console.log('👤 User login:', { email: account.email, nomPrenom: username });
-  } else {
-    // 🏢 Professional account
-    username =
-      account.professionalData?.fullName ||
-      account.fullName ||
-      account.email.split('@')[0];
-    console.log('🏢 Professional login:', {
+    if (isUserAccount(account)) {
+      // 👤 User account
+      username = account.fullName || account.username || account.email.split('@')[0];
+      console.log('👤 User login:', { email: account.email, nomPrenom: username });
+    } else {
+      // 🏢 Professional account
+      username =
+        account.professionalData?.fullName ||
+        account.fullName ||
+        account.email.split('@')[0];
+      console.log('🏢 Professional login:', {
+        email: account.email,
+        fullName: username,
+        accountData: account,
+      });
+    }
+
+    // 6. Créer le payload JWT
+    const accountId = String(account._id);
+    const payload = {
+      sub: accountId,
       email: account.email,
-      fullName: username,
-      accountData: account,
-    });
+      role,
+      username,
+    };
+
+    console.log('🔐 JWT Payload:', payload);
+
+    // 7. ✅ Générer tokens
+    const access_token = this.jwtService.sign(payload, { expiresIn: '24h' });
+    const refresh_token = this.jwtService.sign(payload, { expiresIn: '7d' });
+
+    console.log('✅ Tokens generated successfully');
+
+    return {
+      access_token,
+      refresh_token,
+      role,
+      email: account.email,
+      id: accountId,
+      username,
+    };
   }
-
-  // 6. Créer le payload JWT
-  const accountId = String(account._id);
-  const payload = {
-    sub: accountId,
-    email: account.email,
-    role,
-    username,
-  };
-
-  console.log('🔐 JWT Payload:', payload);
-
-  // 7. ✅ Générer tokens
-  const access_token = this.jwtService.sign(payload, { expiresIn: '24h' });
-  const refresh_token = this.jwtService.sign(payload, { expiresIn: '7d' });
-
-  console.log('✅ Tokens generated successfully');
-
-  return {
-    access_token,
-    refresh_token,
-    role,
-    email: account.email,
-    id: accountId,
-    username,
-  };
-}
 
 
   // ================= Google Login =================
   async googleLogin(idToken: string) {
     try {
       console.log('🔐 Google login attempt');
-      
+
       // Verify the Google ID token
       const googlePayload = await verifyGoogleToken(idToken);
-      
+
       if (!googlePayload || !googlePayload.email) {
         console.log('❌ Invalid Google token payload');
         throw new UnauthorizedException('Invalid Google token');
@@ -240,7 +237,7 @@ export class AuthService {
       const email = googlePayload.email.toLowerCase().trim();
       const name = googlePayload.name || googlePayload.given_name || '';
       const picture = googlePayload.picture || '';
-      
+
       console.log('✅ Google token verified for:', email);
       console.log('📸 Profile picture URL:', picture);
       console.log('👤 Full name from Google:', name);
@@ -258,13 +255,13 @@ export class AuthService {
       // If user doesn't exist, create a new user account (REGISTRATION)
       if (!account) {
         console.log('📝 Creating new user account for Google login:', email);
-        
+
         // Generate a random password (users won't need it for Google login)
         const randomPassword = crypto.randomBytes(32).toString('hex');
         const hashedPassword = await bcrypt.hash(randomPassword, 10);
-        
+
         // Generate username from email or name
-        const username = name 
+        const username = name
           ? name.toLowerCase().replace(/\s+/g, '_') + '_' + crypto.randomInt(1000, 9999)
           : email.split('@')[0] + '_' + crypto.randomInt(1000, 9999);
 
@@ -363,8 +360,8 @@ export class AuthService {
         id: accountId,
         username,
         profilePictureUrl: account.profilePictureUrl || picture, // Return profile picture URL
-        fullName: isUserAccount(account) 
-          ? (account.fullName || name) 
+        fullName: isUserAccount(account)
+          ? (account.fullName || name)
           : (account.fullName || account.professionalData?.fullName || name),
       };
     } catch (error) {
@@ -381,11 +378,11 @@ export class AuthService {
     try {
       const payload = this.jwtService.verify(refreshToken);
       const newAccessToken = this.jwtService.sign(
-        { 
-          sub: payload.sub, 
-          email: payload.email, 
+        {
+          sub: payload.sub,
+          email: payload.email,
           role: payload.role,
-          username: payload.username 
+          username: payload.username
         },
         { expiresIn: '24h' }, // ✅ 24h au lieu de 15m
       );
@@ -399,28 +396,28 @@ export class AuthService {
   // ================= SEND OTP =================
   async sendOtp(email: string) {
     console.log('🔍 OTP request for:', email);
-    
+
     const normalizedEmail = email.trim().toLowerCase();
-    
-    let account: UserDocument | ProfessionalDocument | null = 
+
+    let account: UserDocument | ProfessionalDocument | null =
       await this.userModel.findOne({ email: normalizedEmail }).exec();
-    
+
     if (!account) {
       account = await this.profModel.findOne({ email: normalizedEmail }).exec();
     }
-    
+
     if (!account) {
       console.log('⚠️ Account not found for OTP:', normalizedEmail);
       // Ne pas révéler si l'email existe ou non (sécurité)
-      return { 
-        success: true, 
-        message: 'If this email exists, an OTP has been sent' 
+      return {
+        success: true,
+        message: 'If this email exists, an OTP has been sent'
       };
     }
 
     const otp = crypto.randomInt(100000, 999999).toString();
     console.log('🔑 Generated OTP:', otp);
-    
+
     this.otpStore.set(normalizedEmail, {
       otp,
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
@@ -434,9 +431,9 @@ export class AuthService {
       throw new BadRequestException('Failed to send OTP email');
     }
 
-    return { 
-      success: true, 
-      message: 'OTP sent to your email' 
+    return {
+      success: true,
+      message: 'OTP sent to your email'
     };
   }
 
@@ -465,15 +462,15 @@ export class AuthService {
 
     const resetToken = crypto.randomBytes(32).toString('hex');
     console.log('✅ OTP verified, generated reset token');
-    
+
     // Remplacer l'OTP par le reset token
     this.otpStore.set(normalizedEmail, {
       otp: resetToken,
       expiresAt: new Date(Date.now() + 15 * 60 * 1000),
     });
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       message: 'OTP verified',
       resetToken
     };
@@ -496,7 +493,7 @@ export class AuthService {
     }
 
     // Chercher le compte
-    let account: UserDocument | ProfessionalDocument | null = 
+    let account: UserDocument | ProfessionalDocument | null =
       await this.userModel.findOne({ email: normalizedEmail }).exec();
     let isUser = true;
 
@@ -510,17 +507,17 @@ export class AuthService {
     }
 
     console.log('🔐 Old password hash:', account.password.substring(0, 20) + '...');
-    
+
     // Hasher le nouveau mot de passe
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     console.log('🔐 New password hash:', hashedPassword.substring(0, 20) + '...');
-    
+
     // Mettre à jour le mot de passe
     account.password = hashedPassword;
     await account.save();
 
     // Vérification
-    const updatedAccount = isUser 
+    const updatedAccount = isUser
       ? await this.userModel.findOne({ email: normalizedEmail }).exec()
       : await this.profModel.findOne({ email: normalizedEmail }).exec();
 
@@ -534,9 +531,9 @@ export class AuthService {
     // Supprimer le token utilisé
     this.otpStore.delete(normalizedEmail);
 
-    return { 
-      success: true, 
-      message: 'Password reset successfully' 
+    return {
+      success: true,
+      message: 'Password reset successfully'
     };
   }
 
@@ -553,7 +550,7 @@ export class AuthService {
     });
 
     await transporter.verify();
-    
+
     const mailOptions = {
       from: this.configService.get<string>('MAIL_FROM'),
       to: email,
@@ -608,6 +605,14 @@ export class AuthService {
 
   private isUserAccount(account: UserDocument | ProfessionalDocument): account is UserDocument {
     return (account as UserDocument).username !== undefined;
+  }
+
+  private async checkEmailUniqueness(email: string) {
+    const userExists = await this.userModel.findOne({ email }).exec();
+    if (userExists) throw new BadRequestException('This mail already exist');
+
+    const profExists = await this.profModel.findOne({ email }).exec();
+    if (profExists) throw new BadRequestException('This mail already exist');
   }
 
   async logout(): Promise<{ message: string }> {

@@ -7,13 +7,13 @@ export type UserDocument = UserAccount & Document;
 @Schema({ timestamps: true })
 export class UserAccount {
 
-   _id?: Types.ObjectId;
+  _id?: Types.ObjectId;
 
-   
-  @Prop({ required: true, unique: true })
+
+  @Prop({ required: true })
   username: string;
 
-   @Prop({ required: false, default: '' }) // Full name, e.g., "Mohamed Ali"
+  @Prop({ required: false, default: '' }) // Full name, e.g., "Mohamed Ali"
   fullName: string;
 
   @Prop({ required: false, default: '' }) // Short description for the profile
@@ -39,7 +39,7 @@ export class UserAccount {
 
   @Prop({ default: 'user' })
   role: string;
-  
+
   @Prop({ default: null })
   profilePictureUrl: string;
 
@@ -64,15 +64,17 @@ export class UserAccount {
   @Prop({ default: 0 })
   invalidReclamationsCount: number;
 
-  @Prop({ default: 100 }) 
+  @Prop({ default: 100 })
   reliabilityScore: number;
 
-  @Prop({ type: [{ 
-    points: Number, 
-    reason: String, 
-    reclamationId: String, 
-    date: Date 
-  }], default: [] })
+  @Prop({
+    type: [{
+      points: Number,
+      reason: String,
+      reclamationId: String,
+      date: Date
+    }], default: []
+  })
   pointsHistory: Array<{
     points: number;
     reason: string;
