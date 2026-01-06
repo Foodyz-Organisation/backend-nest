@@ -3,7 +3,7 @@ import { IsString, IsNotEmpty, IsEmail, IsOptional, IsUrl } from 'class-validato
 import { ApiProperty } from '@nestjs/swagger'; // <-- Add ApiProperty
 
 export class CreateUserDto {
-  @ApiProperty({ description: 'Unique username for the user', example: 'mohamedali_foodie' })
+  @ApiProperty({ description: 'Username for the user', example: 'mohamedali_foodie' })
   @IsString()
   @IsNotEmpty()
   username: string;

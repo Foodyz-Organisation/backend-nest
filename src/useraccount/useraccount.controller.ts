@@ -4,11 +4,12 @@ import { UsersService } from './useraccount.service';
 import { CreateUserDto } from './dto/create-useraccount.dto';
 import { UpdateUserDto } from './dto/update-useraccount.dto';
 import { UserProfileResponseDto } from './dto/user-profile-response.dto'; // <-- NEW IMPORT
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger'; // <-- NEW IMPORTS for Swagger
+import { ApiTags, ApiOperation, ApiResponse, ApiConsumes, ApiBody } from '@nestjs/swagger'; // <-- NEW IMPORTS for Swagger
 import { Types } from 'mongoose'; // <-- NEW IMPORT for ObjectId validation
 import { FileInterceptor } from '@nestjs/platform-express'; // Import FileInterceptor
 import { ImageUploadService } from 'src/menuitem/imageuploadservice';
 import { SupabaseStorageService } from '../common/services/supabase-storage.service';
+import { ProfilePictureUploadService } from './profile-picture-upload.service';
 
 
 @ApiTags('users')// Group endpoints under 'users' tag in Swagger
@@ -86,6 +87,10 @@ export class UsersController {
     }
     return this.usersService.getProfile(id);
   }
+  /**
+   * @deprecated Use POST /users/:id/profile-picture instead
+   * This endpoint is kept for backward compatibility but may go through AI validation.
+   */
   @Patch(':id/upload-profile-image')
   @UseInterceptors(
     // 'file' is the key expected in the form-data request body
@@ -110,6 +115,78 @@ export class UsersController {
 
     return {
       message: 'Profile image updated successfully.',
+      profilePictureUrl: imageUrl,
+      user: updatedUser,
+    };
+  }
+
+  /**
+   * ✅ NEW DEDICATED ENDPOINT: Upload profile picture (NO AI VALIDATION)
+   * This endpoint is specifically designed for profile pictures and bypasses
+   * any food-related AI validation that might be applied to other uploads.
+   * 
+   * @param id - User ID
+   * @param file - Profile picture file (form-data with key 'profilePicture')
+   * @returns Updated user with profilePictureUrl
+   */
+  @Post(':id/profile-picture')
+  @ApiOperation({ 
+    summary: 'Upload user profile picture (NO AI validation)',
+    description: 'Uploads a profile picture for a user. This endpoint bypasses all AI validation and is specifically designed for profile pictures only.'
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        profilePicture: {
+          type: 'string',
+          format: 'binary',
+          description: 'Profile picture image file (max 5MB, images only)'
+        },
+      },
+      required: ['profilePicture'],
+    },
+  })
+  @ApiResponse({ 
+    status: 201, 
+    description: 'Profile picture uploaded successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+        profilePictureUrl: { type: 'string' },
+        user: { type: 'object' },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Bad request (invalid file or user ID)' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  @UseInterceptors(
+    // 'profilePicture' is the key expected in the form-data request body
+    FileInterceptor('profilePicture', ProfilePictureUploadService.getMulterConfig()),
+  )
+  async uploadProfilePicture(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    // Validate user ID format
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid user ID format.');
+    }
+
+    if (!file) {
+      throw new BadRequestException('Profile picture file is required. Please use the key "profilePicture" in your form-data.');
+    }
+
+    // 1. Upload to Supabase Storage using dedicated method (NO AI VALIDATION)
+    const imageUrl = await this.supabaseStorageService.uploadProfilePicture(file);
+
+    // 2. Update the user's profilePictureUrl field
+    const updatedUser = await this.usersService.updateProfilePicture(id, imageUrl);
+
+    return {
+      message: 'Profile picture uploaded successfully.',
       profilePictureUrl: imageUrl,
       user: updatedUser,
     };

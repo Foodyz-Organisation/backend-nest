@@ -103,6 +103,8 @@ export class PostsService {
     }
 
     // Part 2: Food Category Matching - Validate user-selected category against AI prediction
+    // ⚠️ IMPORTANT: Category validation is ONLY performed for posts, not other entities
+    // This AI validation ensures the user-selected food category matches the AI-detected category
     // This runs synchronously and includes results in the response
     let categoryValidation: any = null;
     
@@ -211,8 +213,22 @@ export class PostsService {
     return responseWithValidation as any as PostDocument;
   }
 
+  /**
+   * Upload files for POSTS ONLY
+   * 
+   * ⚠️ IMPORTANT: This method includes AI food detection validation.
+   * This validation is ONLY applied to post uploads, NOT to:
+   * - Profile picture uploads (useraccount.controller.ts)
+   * - License document uploads (professionalaccount.controller.ts)
+   * - Reclamation photo uploads (reclamation.controller.ts)
+   * - Menu item image uploads (menuitem.controller.ts)
+   * - Deal image uploads (deals.controller.ts)
+   * 
+   * Food detection services are ONLY injected in PostsService and PostsController.
+   */
   async uploadFiles(files: MulterFile[]): Promise<UploadResponseDto> {
     // Part 1: Food Detection - Validate that all uploaded files contain food-related content
+    // ⚠️ NOTE: This AI validation is ONLY for post uploads, not other image uploads in the system
     for (const file of files) {
       // Only validate image files (skip videos for now, or extract frame for validation)
       if (file.mimetype.startsWith('image/')) {
@@ -909,7 +925,17 @@ async createComment(
       select: '_id username fullName profilePictureUrl followerCount followingCount' // Fields to populate
     });
 
-    return savedComment as CommentDocument; // Assert type
+    // Transform to match frontend CommentResponse structure
+    const commentObj = savedComment.toObject();
+    const populatedUser = savedComment.userId as any;
+
+    return {
+      ...commentObj,
+      authorName: populatedUser?.fullName || null,
+      authorUsername: populatedUser?.username || null,
+      authorAvatar: populatedUser?.profilePictureUrl || null,
+      authorId: populatedUser?._id?.toString() || null,
+    } as unknown as CommentDocument;
   }
 
 
@@ -925,7 +951,19 @@ async createComment(
       select: '_id username fullName profilePictureUrl followerCount followingCount'
     })));
 
-    return comments as CommentDocument[]; // Assert type
+    // Transform each comment to match frontend CommentResponse structure
+    return comments.map(comment => {
+      const commentObj = comment.toObject();
+      const populatedUser = comment.userId as any;
+
+      return {
+        ...commentObj,
+        authorName: populatedUser?.fullName || null,
+        authorUsername: populatedUser?.username || null,
+        authorAvatar: populatedUser?.profilePictureUrl || null,
+        authorId: populatedUser?._id?.toString() || null,
+      } as unknown as CommentDocument;
+    });
   }
 
   async deleteComment(commentId: Types.ObjectId, userId: Types.ObjectId): Promise<void> { // <-- NEW: userId for authorization

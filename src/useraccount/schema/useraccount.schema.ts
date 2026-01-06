@@ -96,3 +96,6 @@ export class UserAccount {
 }
 
 export const UserSchema = SchemaFactory.createForClass(UserAccount);
+
+// Create a non-unique index on username for query performance (allows duplicate usernames)
+UserSchema.index({ username: 1 }, { unique: false });

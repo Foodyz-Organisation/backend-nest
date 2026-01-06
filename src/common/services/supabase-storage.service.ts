@@ -228,7 +228,65 @@ export class SupabaseStorageService {
       .getPublicUrl(filePath);
     return data.publicUrl;
   }
+
+  /**
+   * ✅ DEDICATED METHOD: Upload profile picture (NO AI VALIDATION)
+   * This method is specifically for profile pictures and bypasses any food-related AI validation.
+   * @param file - Express.Multer.File containing the profile picture
+   * @returns Public URL of the uploaded profile picture
+   */
+  async uploadProfilePicture(file: Express.Multer.File): Promise<string> {
+    try {
+      if (!file) {
+        throw new BadRequestException('Profile picture file is required');
+      }
+
+      // Validate it's an image
+      if (!file.mimetype.startsWith('image/')) {
+        throw new BadRequestException('Only image files are allowed for profile pictures');
+      }
+
+      // Generate unique filename for profile picture
+      const timestamp = Date.now();
+      const randomString = Array(32)
+        .fill(null)
+        .map(() => Math.round(Math.random() * 16).toString(16))
+        .join('');
+      const ext = this.getFileExtension(file.originalname || 'profile.jpg');
+      const uniqueFilename = `profile-${timestamp}-${randomString}${ext}`;
+
+      // Upload to 'profiles' folder in Supabase Storage
+      const filePath = `profiles/${uniqueFilename}`;
+
+      // Upload to Supabase Storage
+      const { data, error } = await this.supabase.storage
+        .from(this.bucketName)
+        .upload(filePath, file.buffer, {
+          contentType: file.mimetype,
+          upsert: false,
+        });
+
+      if (error) {
+        this.logger.error(`❌ Error uploading profile picture to Supabase: ${error.message}`);
+        throw new BadRequestException(`Failed to upload profile picture: ${error.message}`);
+      }
+
+      // Get public URL
+      const { data: urlData } = this.supabase.storage
+        .from(this.bucketName)
+        .getPublicUrl(filePath);
+
+      const publicUrl = urlData.publicUrl;
+      this.logger.log(`✅ Profile picture uploaded successfully: ${publicUrl}`);
+      return publicUrl;
+    } catch (error) {
+      this.logger.error(`❌ Error in uploadProfilePicture: ${error.message}`);
+      throw error;
+    }
+  }
 }
+
+
 
 
 

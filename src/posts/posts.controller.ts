@@ -43,6 +43,11 @@ import { HuggingFaceFoodDetectionService } from '../common/services/huggingface-
 @ApiTags('posts')
 @Controller('posts')
 export class PostsController {
+  /**
+   * ⚠️ IMPORTANT: Food detection and category matching services are ONLY injected here.
+   * These AI services are NOT used in other controllers (useraccount, professionalaccount, etc.).
+   * This ensures AI validation is ONLY applied to post uploads, not profile pictures, licenses, etc.
+   */
   constructor(
     private readonly postsService: PostsService,
     private readonly foodDetectionService: FoodDetectionService,

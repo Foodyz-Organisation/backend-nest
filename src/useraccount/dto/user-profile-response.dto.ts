@@ -8,7 +8,7 @@ export class UserProfileResponseDto {
   @IsNotEmpty()
   _id: string; // Mongoose will convert ObjectId to string
 
-  @ApiProperty({ description: 'Unique username for the user', example: 'mohamedali_foodie' })
+  @ApiProperty({ description: 'Username for the user', example: 'mohamedali_foodie' })
   @IsString()
   @IsNotEmpty()
   username: string;
