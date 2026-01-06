@@ -18,6 +18,7 @@ import { CartitemModule } from './cartitem/cartitem.module';
 import { ChatManagementModule } from './chat-management/chat-management.module';
 import { NotificationModule } from './notification/notification.module';
 import { CommonModule } from './common/common.module';
+import { MealScannerModule } from './meal_scanner/meal-scanner.module';
 
 
 
@@ -48,6 +49,7 @@ import { CommonModule } from './common/common.module';
     OrderModule,
     CartitemModule,
     NotificationModule,
+    MealScannerModule,
   ],
   controllers: [
     StaticFilesController,
