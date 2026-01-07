@@ -14,8 +14,11 @@ async function bootstrap() {
   app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 
   // ===== CORS Configuration (Optimized for Mobile Apps) =====
+  const frontendUrl = process.env.FRONTEND_URL;
+  const corsOrigin = frontendUrl ? frontendUrl.split(',') : '*'; // Support multiple origins separated by comma
+  
   app.enableCors({
-    origin: '*', // Allows all origins (for development)
+    origin: corsOrigin, // Use FRONTEND_URL env var or allow all origins (for development)
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
     allowedHeaders: 'Content-Type, Accept, Authorization, x-user-id, x-owner-type',
